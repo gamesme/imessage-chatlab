@@ -9,6 +9,7 @@ mod exporter;
 mod logging;
 mod options;
 mod preflight;
+mod preview;
 mod progress;
 mod query;
 mod runtime;
