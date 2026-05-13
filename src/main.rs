@@ -10,6 +10,7 @@ mod logging;
 mod options;
 mod preflight;
 mod progress;
+mod query;
 mod runtime;
 
 use std::process::exit;
