@@ -494,7 +494,7 @@ impl<'a> JSON<'a> {
     }
 
     pub fn iter_messages(&mut self) -> Result<(), RuntimeError> {
-        eprintln!(
+        crate::info!(
             "Exporting to {} as json...",
             self.config.options.export_path.display()
         );

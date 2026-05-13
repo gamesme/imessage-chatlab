@@ -240,23 +240,23 @@ impl Config {
     pub fn new(options: Options) -> Result<Config, RuntimeError> {
         let data_source = DataSource::from(&options)?;
 
-        eprintln!("Building cache...");
-        eprintln!("  [1/5] Caching chats...");
+        crate::info!("Building cache...");
+        crate::info!("  [1/5] Caching chats...");
         let chatrooms = Chat::cache(data_source.db())?;
 
-        eprintln!("  [2/5] Caching chatrooms...");
+        crate::info!("  [2/5] Caching chatrooms...");
         let chatroom_participants = ChatToHandle::cache(data_source.db())?;
         let chat_handle_lookup = ChatToHandle::get_chat_lookup_map(data_source.db())?;
         let real_chatrooms = ChatToHandle::dedupe(&chatroom_participants, &chat_handle_lookup)?;
 
-        eprintln!("  [3/5] Caching participants...");
+        crate::info!("  [3/5] Caching participants...");
         let participants = Handle::cache(data_source.db())?;
         let real_participants = Handle::dedupe(&participants);
         let participants_map = data_source
             .contacts_index
             .build_participants_map(&participants, &real_participants);
 
-        eprintln!("Cache built!");
+        crate::info!("Cache built!");
 
         Ok(Config {
             chatrooms,
@@ -330,7 +330,7 @@ impl Config {
                 }
             }
 
-            eprintln!(
+            crate::info!(
                 "Filtering for {} handle{} across {} chatrooms...",
                 unique_handle_ids.len(),
                 if unique_handle_ids.len() == 1 {
@@ -429,7 +429,7 @@ impl Config {
                 }
             }
         }
-        println!("Done!");
+        crate::info!("Done!");
         Ok(())
     }
 
