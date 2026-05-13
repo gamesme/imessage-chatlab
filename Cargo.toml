@@ -1,0 +1,27 @@
+[package]
+name = "imessage-chatlab"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Export iMessage data to ChatLab v0.0.2 standard JSON format"
+repository = "https://github.com/gamesme/imessage-chatlab"
+readme = "README.md"
+categories = ["command-line-utilities"]
+keywords = ["imessage", "chatlab", "export", "json"]
+exclude = [".github", "docs", "test_data"]
+
+[dependencies]
+imessage-database = "=4.0.0"
+base64 = "=0.22.1"
+clap = { version = "=4.6.0", features = ["cargo"] }
+crabapple = "=0.4.6"
+fdlimit = "=0.3.0"
+fs2 = "=0.4.3"
+jzon = "=0.12.5"
+plist = "=1.8.0"
+rusqlite = { version = "=0.39.0", features = ["blob", "bundled"] }
+sha1 = "=0.10.6"
+
+[profile.release]
+lto = true
+strip = "debuginfo"
