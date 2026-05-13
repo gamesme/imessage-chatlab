@@ -247,6 +247,33 @@ impl Options {
     }
 }
 
+impl Options {
+    /// Minimal Options for the `list` subcommand. Uses the default DB path,
+    /// no filters, default export type. The `export_path` is unused (list
+    /// never writes files).
+    pub fn default_for_list() -> Self {
+        Options {
+            db_path: default_db_path(),
+            attachment_root: None,
+            attachment_manager: AttachmentManager::default(),
+            export_type: Some(ExportType::Json),
+            export_path: std::env::temp_dir(),
+            query_context: QueryContext::default(),
+            custom_name: None,
+            use_caller_id: false,
+            platform: Platform::macOS,
+            ignore_disk_space: true,
+            conversation_filter: None,
+            cleartext_password: None,
+            contacts_path: None,
+            embed_avatars: false,
+            quiet: false,
+            no_timestamp: false,
+            dry_run: false,
+        }
+    }
+}
+
 /// Used only when `--no-timestamp` is set. Refuses to overwrite a directory
 /// that already contains JSON files of the same export type.
 fn validate_path_no_existing_json(
@@ -323,140 +350,131 @@ pub fn cli() -> Command {
     Command::new("imessage-chatlab")
         .version(crate_version!())
         .about(ABOUT)
-        .arg(
-            Arg::new(OPTION_ATTACHMENT_MANAGER)
-                .short('c')
-                .long(OPTION_ATTACHMENT_MANAGER)
-                .help(format!("Specify an optional method to use when copying message attachments\n`clone` will copy all files without converting anything\n`basic` will copy all files and convert HEIC images to JPEG\n`full` will copy all files and convert HEIC files to JPEG, CAF to MP4, and MOV to MP4\nIf omitted, the default is `{}`\nImageMagick is required to convert images on non-macOS platforms\nffmpeg is required to convert audio on non-macOS platforms and video on all platforms\n", AttachmentManagerMode::default()))
-                .display_order(1)
-                .value_name(SUPPORTED_ATTACHMENT_MANAGER_MODES),
+        .subcommand_required(false)
+        .arg_required_else_help(false)
+        .subcommand(
+            Command::new("list")
+                .about("List conversations (without exporting)")
+                .arg(
+                    Arg::new("json")
+                        .long("json")
+                        .help("Output as JSON instead of an aligned table\n")
+                        .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    Arg::new("quiet")
+                        .short('q')
+                        .long("quiet")
+                        .help("Suppress informational output\n")
+                        .action(ArgAction::SetTrue),
+                ),
         )
-        .arg(
-            Arg::new(OPTION_DB_PATH)
-                .short('p')
-                .long(OPTION_DB_PATH)
-                .help(format!("Specify an optional custom path for the iMessage database location\nFor macOS, specify a path to a `chat.db` file\nFor iOS, specify a path to the root of a device backup directory\nIf the iOS backup is encrypted, --{OPTION_CLEARTEXT_PASSWORD} must be passed\nIf omitted, the default directory is {}\n", default_db_path().display()))
-                .display_order(2)
-                .value_name("path/to/source"),
-        )
-        .arg(
-            Arg::new(OPTION_ATTACHMENT_ROOT)
-                .short('r')
-                .long(OPTION_ATTACHMENT_ROOT)
-                .help(format!("Specify an optional custom path to look for attachment data in\nOnly use this if attachments are stored separately from the database's default location\nThe provided path should be absolute\nThis option affects both the `Attachments` and `StickerCache` directories\nAlso works with jailbroken iOS sms.db databases (use `--platform macOS`)\nHas no effect on iOS backups\nThe default location is {}\n", DEFAULT_MESSAGES_ROOT.replacen('~', &home(), 1)))
-                .display_order(3)
-                .value_name("path/to/messages/root"),
-        )
-        .arg(
-            Arg::new(OPTION_PLATFORM)
-                .short('a')
-                .long(OPTION_PLATFORM)
-                .help("Specify the platform the database was created on\nIf omitted, the platform type is determined automatically\n")
-                .display_order(4)
-                .value_name(SUPPORTED_PLATFORMS),
-        )
-        .arg(
-            Arg::new(OPTION_EXPORT_PATH)
-                .short('o')
-                .long(OPTION_EXPORT_PATH)
-                .help(format!("Specify an optional custom directory for outputting exported data\nIf omitted, the default directory is {}/{DEFAULT_OUTPUT_DIR}\n", home()))
-                .display_order(5)
-                .value_name("path/to/save/files"),
-        )
-        .arg(
-            Arg::new(OPTION_START_DATE)
-                .short('s')
-                .long(OPTION_START_DATE)
-                .help("The start date filter\nOnly messages sent on or after this date will be included\n")
-                .display_order(6)
-                .value_name("YYYY-MM-DD"),
-        )
-        .arg(
-            Arg::new(OPTION_END_DATE)
-                .short('e')
-                .long(OPTION_END_DATE)
-                .help("The end date filter\nOnly messages sent before this date will be included\n")
-                .display_order(7)
-                .value_name("YYYY-MM-DD"),
-        )
-        .arg(
-            Arg::new(OPTION_CUSTOM_NAME)
-                .short('m')
-                .long(OPTION_CUSTOM_NAME)
-                .help(format!("Specify an optional custom name for the database owner's messages in exports\nConflicts with --{OPTION_USE_CALLER_ID}\n"))
-                .display_order(8),
-        )
-        .arg(
-            Arg::new(OPTION_USE_CALLER_ID)
-                .short('i')
-                .long(OPTION_USE_CALLER_ID)
-                .help(format!("Use the database owner's caller ID in exports instead of \"Me\"\nConflicts with --{OPTION_CUSTOM_NAME}\n"))
-                .action(ArgAction::SetTrue)
-                .display_order(9),
-        )
-        .arg(
-            Arg::new(OPTION_BYPASS_FREE_SPACE_CHECK)
-                .short('b')
-                .long(OPTION_BYPASS_FREE_SPACE_CHECK)
-                .help("Bypass the disk space check when exporting data\nBy default, exports will not run if there is not enough free disk space\n")
-                .action(ArgAction::SetTrue)
-                .display_order(10),
-        )
-        .arg(
-            Arg::new(OPTION_CONVERSATION_FILTER)
-                .short('t')
-                .long(OPTION_CONVERSATION_FILTER)
-                .help("Filter exported conversations by contact names, numbers, or emails\nTo provide multiple filter criteria, use a comma-separated string\nAll conversations with the specified participants are exported, including group conversations\nExample: `-t steve@apple.com,5558675309`\n")
-                .display_order(11)
-                .value_name("filter"),
-        )
-        .arg(
-            Arg::new(OPTION_CLEARTEXT_PASSWORD)
-                .short('x')
-                .long(OPTION_CLEARTEXT_PASSWORD)
-                .help("Optional password for encrypted iOS backups\nThis is only used when the source is an encrypted iOS backup directory\n")
-                .display_order(12)
-                .value_name("password"),
-        )
-        .arg(
-            Arg::new(OPTION_CUSTOM_CONTACTS_DB_PATH)
-                .short('n')
-                .long(OPTION_CUSTOM_CONTACTS_DB_PATH)
-                .help("Optional custom path for a macOS or iOS contacts database file\nThis should be resolved automatically, but can be manually provided\nHandles from the messages table will be mapped to names in the provided database\nGenerally, one of `AddressBook-v22.abcddb` or `AddressBook.sqlitedb`\n")
-                .display_order(13)
-                .value_name("path"),
-        )
-        .arg(
-            Arg::new(OPTION_EMBED_AVATARS)
-                .long(OPTION_EMBED_AVATARS)
-                .help("Embed contact and group avatars as base64 Data URLs in exports\nDefault: true\n")
-                .required(false)
-                .value_parser(clap::value_parser!(bool))
-                .action(ArgAction::Set)
-                .display_order(14),
-        )
-        .arg(
-            Arg::new(OPTION_QUIET)
-                .short('q')
-                .long(OPTION_QUIET)
-                .help("Suppress informational output (cache progress, status lines)\nErrors are still printed\n")
-                .action(ArgAction::SetTrue)
-                .display_order(15),
-        )
-        .arg(
-            Arg::new(OPTION_NO_TIMESTAMP)
-                .long(OPTION_NO_TIMESTAMP)
-                .help("Don't append a timestamp subdirectory to the output path\nUseful for scripted overwriting in a known location\n")
-                .action(ArgAction::SetTrue)
-                .display_order(16),
-        )
-        .arg(
-            Arg::new(OPTION_DRY_RUN)
-                .long(OPTION_DRY_RUN)
-                .help("Show what would be exported (counts, size, output path) and exit\nDoes not write any files\n")
-                .action(ArgAction::SetTrue)
-                .display_order(17),
-        )
+        .args(export_args())
+}
+
+fn export_args() -> Vec<Arg> {
+    vec![
+        Arg::new(OPTION_ATTACHMENT_MANAGER)
+            .short('c')
+            .long(OPTION_ATTACHMENT_MANAGER)
+            .help(format!("Specify an optional method to use when copying message attachments\n`clone` will copy all files without converting anything\n`basic` will copy all files and convert HEIC images to JPEG\n`full` will copy all files and convert HEIC files to JPEG, CAF to MP4, and MOV to MP4\nIf omitted, the default is `{}`\nImageMagick is required to convert images on non-macOS platforms\nffmpeg is required to convert audio on non-macOS platforms and video on all platforms\n", AttachmentManagerMode::default()))
+            .display_order(1)
+            .value_name(SUPPORTED_ATTACHMENT_MANAGER_MODES),
+        Arg::new(OPTION_DB_PATH)
+            .short('p')
+            .long(OPTION_DB_PATH)
+            .help(format!("Specify an optional custom path for the iMessage database location\nFor macOS, specify a path to a `chat.db` file\nFor iOS, specify a path to the root of a device backup directory\nIf the iOS backup is encrypted, --{OPTION_CLEARTEXT_PASSWORD} must be passed\nIf omitted, the default directory is {}\n", default_db_path().display()))
+            .display_order(2)
+            .value_name("path/to/source"),
+        Arg::new(OPTION_ATTACHMENT_ROOT)
+            .short('r')
+            .long(OPTION_ATTACHMENT_ROOT)
+            .help(format!("Specify an optional custom path to look for attachment data in\nOnly use this if attachments are stored separately from the database's default location\nThe provided path should be absolute\nThis option affects both the `Attachments` and `StickerCache` directories\nAlso works with jailbroken iOS sms.db databases (use `--platform macOS`)\nHas no effect on iOS backups\nThe default location is {}\n", DEFAULT_MESSAGES_ROOT.replacen('~', &home(), 1)))
+            .display_order(3)
+            .value_name("path/to/messages/root"),
+        Arg::new(OPTION_PLATFORM)
+            .short('a')
+            .long(OPTION_PLATFORM)
+            .help("Specify the platform the database was created on\nIf omitted, the platform type is determined automatically\n")
+            .display_order(4)
+            .value_name(SUPPORTED_PLATFORMS),
+        Arg::new(OPTION_EXPORT_PATH)
+            .short('o')
+            .long(OPTION_EXPORT_PATH)
+            .help(format!("Specify an optional custom directory for outputting exported data\nIf omitted, the default directory is {}/{DEFAULT_OUTPUT_DIR}\n", home()))
+            .display_order(5)
+            .value_name("path/to/save/files"),
+        Arg::new(OPTION_START_DATE)
+            .short('s')
+            .long(OPTION_START_DATE)
+            .help("The start date filter\nOnly messages sent on or after this date will be included\n")
+            .display_order(6)
+            .value_name("YYYY-MM-DD"),
+        Arg::new(OPTION_END_DATE)
+            .short('e')
+            .long(OPTION_END_DATE)
+            .help("The end date filter\nOnly messages sent before this date will be included\n")
+            .display_order(7)
+            .value_name("YYYY-MM-DD"),
+        Arg::new(OPTION_CUSTOM_NAME)
+            .short('m')
+            .long(OPTION_CUSTOM_NAME)
+            .help(format!("Specify an optional custom name for the database owner's messages in exports\nConflicts with --{OPTION_USE_CALLER_ID}\n"))
+            .display_order(8),
+        Arg::new(OPTION_USE_CALLER_ID)
+            .short('i')
+            .long(OPTION_USE_CALLER_ID)
+            .help(format!("Use the database owner's caller ID in exports instead of \"Me\"\nConflicts with --{OPTION_CUSTOM_NAME}\n"))
+            .action(ArgAction::SetTrue)
+            .display_order(9),
+        Arg::new(OPTION_BYPASS_FREE_SPACE_CHECK)
+            .short('b')
+            .long(OPTION_BYPASS_FREE_SPACE_CHECK)
+            .help("Bypass the disk space check when exporting data\nBy default, exports will not run if there is not enough free disk space\n")
+            .action(ArgAction::SetTrue)
+            .display_order(10),
+        Arg::new(OPTION_CONVERSATION_FILTER)
+            .short('t')
+            .long(OPTION_CONVERSATION_FILTER)
+            .help("Filter exported conversations by contact names, numbers, emails, or @rowid:N\nTo provide multiple filter criteria, use a comma-separated string\nExample: `-t steve@apple.com,5558675309,@rowid:5`\n")
+            .display_order(11)
+            .value_name("filter"),
+        Arg::new(OPTION_CLEARTEXT_PASSWORD)
+            .short('x')
+            .long(OPTION_CLEARTEXT_PASSWORD)
+            .help("Optional password for encrypted iOS backups\nThis is only used when the source is an encrypted iOS backup directory\n")
+            .display_order(12)
+            .value_name("password"),
+        Arg::new(OPTION_CUSTOM_CONTACTS_DB_PATH)
+            .short('n')
+            .long(OPTION_CUSTOM_CONTACTS_DB_PATH)
+            .help("Optional custom path for a macOS or iOS contacts database file\nThis should be resolved automatically, but can be manually provided\n")
+            .display_order(13)
+            .value_name("path"),
+        Arg::new(OPTION_EMBED_AVATARS)
+            .long(OPTION_EMBED_AVATARS)
+            .help("Embed contact and group avatars as base64 Data URLs in exports\nDefault: true\n")
+            .required(false)
+            .value_parser(clap::value_parser!(bool))
+            .action(ArgAction::Set)
+            .display_order(14),
+        Arg::new(OPTION_QUIET)
+            .short('q')
+            .long(OPTION_QUIET)
+            .help("Suppress informational output (cache progress, status lines)\nErrors are still printed\n")
+            .action(ArgAction::SetTrue)
+            .display_order(15),
+        Arg::new(OPTION_NO_TIMESTAMP)
+            .long(OPTION_NO_TIMESTAMP)
+            .help("Don't append a timestamp subdirectory to the output path\nUseful for scripted overwriting in a known location\n")
+            .action(ArgAction::SetTrue)
+            .display_order(16),
+        Arg::new(OPTION_DRY_RUN)
+            .long(OPTION_DRY_RUN)
+            .help("Show what would be exported (counts, size, output path) and exit\nDoes not write any files\n")
+            .action(ArgAction::SetTrue)
+            .display_order(17),
+    ]
 }
 
 #[cfg(test)]
