@@ -40,6 +40,7 @@ pub const OPTION_CLEARTEXT_PASSWORD: &str = "cleartext-password";
 pub const OPTION_CUSTOM_CONTACTS_DB_PATH: &str = "contacts-path";
 pub const OPTION_EMBED_AVATARS: &str = "embed-avatars";
 pub const OPTION_QUIET: &str = "quiet";
+pub const OPTION_NO_TIMESTAMP: &str = "no-timestamp";
 
 // Other CLI Text
 pub const SUPPORTED_PLATFORMS: &str = "macOS, iOS";
@@ -93,6 +94,7 @@ pub struct Options {
     pub contacts_path: Option<PathBuf>,
     pub embed_avatars: bool,
     pub quiet: bool,
+    pub no_timestamp: bool,
 }
 
 // MARK: Validation
@@ -111,6 +113,7 @@ impl Options {
         let conversation_filter: Option<&String> = args.get_one(OPTION_CONVERSATION_FILTER);
         let cleartext_password: Option<&String> = args.get_one(OPTION_CLEARTEXT_PASSWORD);
         let contacts_path: Option<&String> = args.get_one(OPTION_CUSTOM_CONTACTS_DB_PATH);
+        let no_timestamp = args.get_flag(OPTION_NO_TIMESTAMP);
 
         // Only one format; always set so `runtime.rs` always takes the export branch.
         let export_type: Option<ExportType> = Some(ExportType::Json);
@@ -196,7 +199,13 @@ impl Options {
             None => AttachmentManagerMode::default(),
         };
 
-        let export_path = validate_path(user_export_path, export_type.as_ref())?;
+        let user_export_buf = user_export_path.map(PathBuf::from);
+        let export_path = resolve_export_path(user_export_buf.as_ref(), no_timestamp);
+        if no_timestamp {
+            // Only enforce the legacy "no existing JSON" check when timestamping
+            // is suppressed. With timestamps on, collisions are vanishingly rare.
+            validate_path_no_existing_json(&export_path, &export_type)?;
+        }
 
         let embed_avatars = args
             .get_one::<bool>(OPTION_EMBED_AVATARS)
@@ -221,6 +230,7 @@ impl Options {
             contacts_path: contacts_path.cloned().map(PathBuf::from),
             embed_avatars,
             quiet,
+            no_timestamp,
         })
     }
 
@@ -233,49 +243,73 @@ impl Options {
     }
 }
 
-/// Ensure the export path is empty or does not already contain files of the
-/// current export type.
-fn validate_path(
-    export_path: Option<&String>,
-    export_type: Option<&ExportType>,
-) -> Result<PathBuf, RuntimeError> {
-    let resolved_path =
-        PathBuf::from(export_path.unwrap_or(&format!("{}/{DEFAULT_OUTPUT_DIR}", home())));
-
-    if let Some(export_type) = export_type
-        && resolved_path.exists()
-    {
-        let path_word = match export_path {
-            Some(_) => "Specified",
-            None => "Default",
-        };
-
-        match resolved_path.read_dir() {
-            Ok(files) => {
-                let export_type_extension = export_type.to_string();
-                for file in files.flatten() {
-                    if file
-                        .path()
-                        .extension()
-                        .is_some_and(|s| s.to_str().unwrap_or("") == export_type_extension)
-                    {
-                        return Err(RuntimeError::InvalidOptions(format!(
-                            "{path_word} export path {} contains existing \"{export_type}\" export data!",
-                            resolved_path.display()
-                        )));
-                    }
+/// Used only when `--no-timestamp` is set. Refuses to overwrite a directory
+/// that already contains JSON files of the same export type.
+fn validate_path_no_existing_json(
+    export_path: &std::path::Path,
+    export_type: &Option<ExportType>,
+) -> Result<(), RuntimeError> {
+    let Some(export_type) = export_type else {
+        return Ok(());
+    };
+    if !export_path.exists() {
+        return Ok(());
+    }
+    let extension = export_type.to_string();
+    match export_path.read_dir() {
+        Ok(files) => {
+            for file in files.flatten() {
+                if file
+                    .path()
+                    .extension()
+                    .is_some_and(|s| s.to_str().unwrap_or("") == extension)
+                {
+                    return Err(RuntimeError::InvalidOptions(format!(
+                        "Export path {} already contains \"{export_type}\" files; \
+                         remove them or omit --no-timestamp",
+                        export_path.display()
+                    )));
                 }
             }
-            Err(why) => {
-                return Err(RuntimeError::InvalidOptions(format!(
-                    "{path_word} export path {} is not a valid directory: {why}",
-                    resolved_path.display()
-                )));
-            }
+            Ok(())
         }
+        Err(why) => Err(RuntimeError::InvalidOptions(format!(
+            "Cannot read export path {}: {why}",
+            export_path.display()
+        ))),
     }
+}
 
-    Ok(resolved_path)
+/// Returns the current UTC time formatted as ISO-8601 with filesystem-safe
+/// separators: `YYYY-MM-DDTHH-MM-SSZ` (colons replaced by hyphens).
+pub(crate) fn timestamp_for_path() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let dt = chrono::DateTime::<chrono::Utc>::from_timestamp(secs, 0)
+        .unwrap_or_default();
+    dt.format("%Y-%m-%dT%H-%M-%SZ").to_string()
+}
+
+/// Combine the user-provided base path (or default) with the timestamp policy.
+///
+/// `--no-timestamp` returns `base` unchanged. Otherwise appends a timestamped
+/// subdirectory.
+pub(crate) fn resolve_export_path(
+    user_export_path: Option<&PathBuf>,
+    no_timestamp: bool,
+) -> PathBuf {
+    let base = match user_export_path {
+        Some(p) => p.clone(),
+        None => PathBuf::from(format!("{}/{DEFAULT_OUTPUT_DIR}", home())),
+    };
+    if no_timestamp {
+        base
+    } else {
+        base.join(timestamp_for_path())
+    }
 }
 
 // MARK: CLI
@@ -405,6 +439,13 @@ pub fn cli() -> Command {
                 .action(ArgAction::SetTrue)
                 .display_order(15),
         )
+        .arg(
+            Arg::new(OPTION_NO_TIMESTAMP)
+                .long(OPTION_NO_TIMESTAMP)
+                .help("Don't append a timestamp subdirectory to the output path\nUseful for scripted overwriting in a known location\n")
+                .action(ArgAction::SetTrue)
+                .display_order(16),
+        )
 }
 
 #[cfg(test)]
@@ -432,7 +473,38 @@ impl Options {
             contacts_path: None,
             embed_avatars: true,
             quiet: false,
+            no_timestamp: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod timestamp_path_tests {
+    use super::*;
+    use regex::Regex;
+    use std::path::PathBuf;
+
+    #[test]
+    fn timestamp_format_is_iso8601_fs_safe() {
+        let stamp = timestamp_for_path();
+        // Format: YYYY-MM-DDTHH-MM-SSZ — no colons, ends with Z.
+        let re = Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$").unwrap();
+        assert!(re.is_match(&stamp), "got {stamp}");
+    }
+
+    #[test]
+    fn resolve_export_path_appends_timestamp_by_default() {
+        let base = PathBuf::from("/tmp/imchatlab-test-default");
+        let resolved = resolve_export_path(Some(&base), false);
+        assert!(resolved.starts_with(&base));
+        assert_ne!(resolved, base, "timestamp suffix should differ from base");
+    }
+
+    #[test]
+    fn resolve_export_path_skips_when_no_timestamp() {
+        let base = PathBuf::from("/tmp/imchatlab-test-no-ts");
+        let resolved = resolve_export_path(Some(&base), true);
+        assert_eq!(resolved, base);
     }
 }
 

@@ -13,6 +13,7 @@ exclude = [".github", "docs", "test_data"]
 [dependencies]
 imessage-database = "=4.0.0"
 base64 = "=0.22.1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap = { version = "=4.6.0", features = ["cargo"] }
 crabapple = "=0.4.6"
 fdlimit = "=0.3.0"
@@ -25,3 +26,6 @@ sha1 = "=0.10.6"
 [profile.release]
 lto = true
 strip = "debuginfo"
+
+[dev-dependencies]
+regex = "1.12.3"
