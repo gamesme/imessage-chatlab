@@ -21,6 +21,8 @@ pub enum RuntimeError {
     BackupError(BackupError),
     NotEnoughAvailableSpace(u64, u64),
     FileNameError,
+    /// User cancelled the interactive wizard (Ctrl+C or ESC).
+    WizardCancelled,
 }
 
 impl Display for RuntimeError {
@@ -39,6 +41,7 @@ impl Display for RuntimeError {
             }
             RuntimeError::BackupError(why) => write!(fmt, "{why}"),
             RuntimeError::FileNameError => write!(fmt, "Invalid file name!"),
+            RuntimeError::WizardCancelled => write!(fmt, "Cancelled by user."),
         }
     }
 }
