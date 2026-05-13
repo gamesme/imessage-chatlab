@@ -73,6 +73,62 @@ imessage-chatlab --embed-avatars=false -o ~/imessage_chatlab_export
     --version
 ```
 
+## 交互式向导
+
+在终端里直接运行 `imessage-chatlab`(不带任何参数)会进入 7 步的交互式向导:
+
+1. 确认数据源(自动检测)
+2. 选择要备份哪些消息(全部 / 挑会话 / 按日期 / 按参与者)
+3. 如果选"挑会话",带模糊搜索的多选界面
+4. 选择附件处理方式
+5. 选择是否内嵌头像
+6. 选择输出目录
+7. 确认
+
+任意提示按 `Ctrl+C` 取消;不会产生文件。
+
+加 `--lang zh` 使用中文提示(根据 `$LANG` 自动检测)。
+
+以下情况**跳过**向导:
+
+- 传入任何命令行 flag(例如 `imessage-chatlab -c clone`)
+- stdin 或 stdout 不是 TTY(CI、管道、重定向)
+
+所以原有 `cron` 任务无需修改。
+
+## 列出会话
+
+不导出,只列出所有会话:
+
+```bash
+imessage-chatlab list
+# ROWID  NAME              MESSAGES   LAST ACTIVE     TYPE
+# 1      Alice Wang        12,841     2 days ago      private
+# 2      Family Group       8,201     yesterday       group
+```
+
+JSON 输出供脚本使用:
+
+```bash
+imessage-chatlab list --json | jq '.[] | select(.message_count > 1000)'
+```
+
+`ROWID` 列对同一个数据库快照是稳定的。可以喂回给 `-t`:
+
+```bash
+imessage-chatlab -t '@rowid:1,@rowid:5'
+```
+
+### 输出路径
+
+默认情况下,导出会放到带时间戳的子目录下:
+
+```
+~/imessage_chatlab_export/2026-05-14T22-50-37Z/
+```
+
+这样多次导出不会互相覆盖。如果你想用一个不带时间戳的固定路径,加 `--no-timestamp`。
+
 ## 输出格式
 
 完整的输出格式说明见 [ChatLab 标准格式规范](https://chatlab.fun/cn/standard/chatlab-format.html)。

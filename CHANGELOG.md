@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.0 — Unreleased
+
+### Added
+- Interactive wizard (`imessage-chatlab` with no args + TTY)
+- `list` subcommand with `--json` output
+- `--dry-run` flag for preview without writing
+- `--no-timestamp` flag to opt out of timestamped subdirectories
+- `-q` / `--quiet` flag for cron-friendly output suppression
+- `--lang zh|en` flag (and `$LANG` auto-detection) for Chinese wizard prompts
+- `-t` accepts `@rowid:N` syntax for ID-based filter (use with `list` output)
+- `export` subcommand alias for forward compatibility
+- Fail-fast database readability check (catches Full Disk Access errors fast)
+
+### Changed
+- Default output paths now include a timestamped subdirectory (see README).
+  Use `--no-timestamp` to opt out.
+- Informational status lines now go through the suppressible `info!` macro;
+  warnings and errors still go directly to stderr.
+
 ## 0.1.0 — Unreleased
 
 Initial release. Single output format: ChatLab v0.0.2 standard JSON.

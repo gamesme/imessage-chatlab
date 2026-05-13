@@ -351,6 +351,37 @@ pub fn cli() -> Command {
     Command::new("imessage-chatlab")
         .version(crate_version!())
         .about(ABOUT)
+        .after_help(
+"EXAMPLES:
+  Interactive wizard (no args, in a terminal):
+    imessage-chatlab
+
+  Back up everything to default path:
+    imessage-chatlab -c clone
+
+  Back up to a specific path with no timestamp:
+    imessage-chatlab -c clone -o ~/Backups/imessages --no-timestamp
+
+  List conversations:
+    imessage-chatlab list
+    imessage-chatlab list --json | jq
+
+  Filter by specific conversations (use IDs from `list`):
+    imessage-chatlab -t '@rowid:1,@rowid:5'
+
+  Filter by participant name:
+    imessage-chatlab -t 'Alice Wang'
+
+  Preview without writing files:
+    imessage-chatlab --dry-run
+
+  Quiet mode for cron:
+    imessage-chatlab -q -c clone -o /backups/imessages
+
+  Chinese wizard prompts:
+    imessage-chatlab --lang zh
+",
+        )
         .subcommand_required(false)
         .arg_required_else_help(false)
         .subcommand(

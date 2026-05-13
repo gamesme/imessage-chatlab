@@ -76,6 +76,65 @@ imessage-chatlab --embed-avatars=false -o ~/imessage_chatlab_export
     --version
 ```
 
+## Interactive wizard
+
+Run `imessage-chatlab` with no arguments inside a terminal and you'll be
+walked through a 7-step interactive setup:
+
+1. Confirm the database source (auto-detected)
+2. Choose what to back up (everything / pick / date range / specific people)
+3. (If "pick") multi-select conversations with fuzzy search
+4. Choose how to handle attachments
+5. Choose whether to embed avatars
+6. Choose the output directory
+7. Confirm
+
+Press `Ctrl+C` at any prompt to cancel; no files are written.
+
+Pass `--lang zh` for Chinese prompts (auto-detected from `$LANG`).
+
+The wizard is **skipped** when:
+
+- Any CLI flag is passed (e.g. `imessage-chatlab -c clone`)
+- stdin or stdout is not a TTY (CI, pipes, redirects)
+
+So `cron` jobs continue to work as in v0.1.
+
+## List conversations
+
+Print all chats without exporting:
+
+```bash
+imessage-chatlab list
+# ROWID  NAME              MESSAGES   LAST ACTIVE     TYPE
+# 1      Alice Wang        12,841     2 days ago      private
+# 2      Family Group       8,201     yesterday       group
+# ...
+```
+
+JSON output for scripts:
+
+```bash
+imessage-chatlab list --json | jq '.[] | select(.message_count > 1000)'
+```
+
+The `ROWID` column is stable per database snapshot. Feed it back into `-t`:
+
+```bash
+imessage-chatlab -t '@rowid:1,@rowid:5'
+```
+
+### Output paths
+
+By default, exports go to a timestamped subdirectory:
+
+```
+~/imessage_chatlab_export/2026-05-14T22-50-37Z/
+```
+
+so repeated runs don't collide. Pass `--no-timestamp` to use the literal
+path you provided.
+
 ## Output format
 
 See [ChatLab's standard format spec](https://chatlab.fun/cn/standard/chatlab-format.html)
