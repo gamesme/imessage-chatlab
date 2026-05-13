@@ -277,21 +277,45 @@ impl Config {
     ///   3) send those chat and handle IDs to the query context so they are included in the message table filters
     pub(crate) fn resolve_filtered_handles(&mut self) {
         if let Some(conversation_filter) = &self.options.conversation_filter {
-            let parsed_handle_filter = conversation_filter.split(',').collect::<Vec<&str>>();
+            let tokens: Vec<&str> = conversation_filter.split(',').map(str::trim).collect();
 
             let mut included_chatrooms: BTreeSet<i32> = BTreeSet::new();
             let mut included_handles: BTreeSet<i32> = BTreeSet::new();
+            let mut name_tokens: Vec<&str> = Vec::new();
 
-            // First: Scan the list of participants for included handle IDs
+            // First: peel off @rowid:N tokens (used by `list` output)
+            for token in &tokens {
+                if let Some(num_str) = token.strip_prefix("@rowid:") {
+                    match num_str.parse::<i32>() {
+                        Ok(rowid) => {
+                            if !self.chatrooms.contains_key(&rowid) {
+                                eprintln!(
+                                    "Warning: chat ROWID {rowid} not found in database, ignoring"
+                                );
+                            }
+                            included_chatrooms.insert(rowid);
+                        }
+                        Err(_) => {
+                            eprintln!(
+                                "Warning: invalid ROWID syntax \"{token}\", ignoring"
+                            );
+                        }
+                    }
+                } else if !token.is_empty() {
+                    name_tokens.push(token);
+                }
+            }
+
+            // Second: name-based matching (existing logic)
             self.participants.iter().for_each(|(_, handle_name)| {
-                for included_name in &parsed_handle_filter {
+                for included_name in &name_tokens {
                     if handle_name.contains(included_name) {
                         included_handles.extend(&handle_name.handle_ids);
                     }
                 }
             });
 
-            // Second: scan the list of chatrooms for IDs that contain the selected participants
+            // Third: chatrooms whose participants overlap with matched handles
             self.chatroom_participants
                 .iter()
                 .for_each(|(chat_id, participants)| {
@@ -300,10 +324,15 @@ impl Config {
                     }
                 });
 
-            self.options
-                .query_context
-                .set_selected_handle_ids(included_handles);
-
+            // If name tokens were present, always set selected_handle_ids (even if empty),
+            // so callers can distinguish "name filter ran but matched nothing" from "no filter".
+            if !name_tokens.is_empty() {
+                self.options.query_context.selected_handle_ids = Some(included_handles);
+            } else {
+                self.options
+                    .query_context
+                    .set_selected_handle_ids(included_handles);
+            }
             self.options
                 .query_context
                 .set_selected_chat_ids(included_chatrooms);
@@ -1238,5 +1267,60 @@ mod chat_filter_tests {
             app.options.query_context.selected_chat_ids,
             Some(BTreeSet::from([4, 6]))
         );
+    }
+}
+
+#[cfg(test)]
+mod rowid_filter_tests {
+
+    use super::*;
+    use crate::options::{ExportType, Options};
+
+    fn make_app_with_filter(filter: &str) -> Config {
+        let mut opts = Options::fake_options(ExportType::Json);
+        opts.conversation_filter = Some(filter.to_string());
+        Config::fake_app(opts)
+    }
+
+    #[test]
+    fn resolve_handles_parses_rowid_syntax() {
+        let mut app = make_app_with_filter("@rowid:1,@rowid:5");
+        app.resolve_filtered_handles();
+        let selected = app
+            .options
+            .query_context
+            .selected_chat_ids
+            .as_ref()
+            .expect("should have populated selected_chat_ids");
+        assert!(selected.contains(&1));
+        assert!(selected.contains(&5));
+    }
+
+    #[test]
+    fn resolve_handles_mixes_rowid_and_names() {
+        let mut app = make_app_with_filter("Person 10,@rowid:5");
+        app.resolve_filtered_handles();
+        let chat_ids = app.options.query_context.selected_chat_ids.as_ref().unwrap();
+        assert!(chat_ids.contains(&5), "ROWID 5 should be included");
+        assert!(
+            app.options.query_context.selected_handle_ids.is_some(),
+            "name match should still run alongside rowid parsing"
+        );
+    }
+
+    #[test]
+    fn resolve_handles_warns_on_unknown_rowid_but_keeps_known() {
+        let mut app = make_app_with_filter("@rowid:1,@rowid:99999");
+        app.resolve_filtered_handles();
+        let chat_ids = app.options.query_context.selected_chat_ids.as_ref().unwrap();
+        assert!(chat_ids.contains(&1));
+    }
+
+    #[test]
+    fn resolve_handles_ignores_malformed_rowid_token() {
+        let mut app = make_app_with_filter("@rowid:abc,@rowid:1");
+        app.resolve_filtered_handles();
+        let chat_ids = app.options.query_context.selected_chat_ids.as_ref().unwrap();
+        assert!(chat_ids.contains(&1), "valid token should still apply");
     }
 }
