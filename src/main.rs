@@ -6,6 +6,7 @@ mod contacts;
 mod data_source;
 mod error;
 mod exporter;
+mod logging;
 mod options;
 mod progress;
 mod runtime;
