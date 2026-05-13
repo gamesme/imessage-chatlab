@@ -24,12 +24,11 @@ fn print_table(summaries: &[ChatSummary]) {
         .unwrap_or(20);
 
     println!(
-        "{:>6}  {:<name_w$}  {:>10}  {:<14}  {}",
+        "{:>6}  {:<name_w$}  {:>10}  {:<14}  TYPE",
         "ROWID",
         "NAME",
         "MESSAGES",
         "LAST ACTIVE",
-        "TYPE",
         name_w = max_name_len
     );
     println!(

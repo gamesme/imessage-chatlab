@@ -58,17 +58,11 @@ pub struct Strings {
     pub summary_proceed: &'static str,
     pub summary_label_source: &'static str,
     pub summary_label_chats: &'static str,
-    pub summary_label_date: &'static str,
     pub summary_label_attach: &'static str,
     pub summary_label_avatars: &'static str,
     pub summary_label_output: &'static str,
     pub summary_avatars_embedded: &'static str,
     pub summary_avatars_not_embedded: &'static str,
-    pub summary_dates_all: &'static str,
-
-    // Misc
-    pub error_at_least_one: &'static str,
-    pub cancelled: &'static str,
 }
 
 pub const EN: Strings = Strings {
@@ -101,15 +95,11 @@ pub const EN: Strings = Strings {
     summary_proceed: "Proceed?",
     summary_label_source: "Source",
     summary_label_chats: "Chats",
-    summary_label_date: "Date range",
     summary_label_attach: "Attachments",
     summary_label_avatars: "Avatars",
     summary_label_output: "Output",
     summary_avatars_embedded: "embedded",
     summary_avatars_not_embedded: "not embedded",
-    summary_dates_all: "all messages",
-    error_at_least_one: "Select at least one option",
-    cancelled: "Cancelled by user.",
 };
 
 pub const ZH: Strings = Strings {
@@ -142,15 +132,11 @@ pub const ZH: Strings = Strings {
     summary_proceed: "确认开始?",
     summary_label_source: "数据源",
     summary_label_chats: "会话",
-    summary_label_date: "日期范围",
     summary_label_attach: "附件",
     summary_label_avatars: "头像",
     summary_label_output: "输出",
     summary_avatars_embedded: "已内嵌",
     summary_avatars_not_embedded: "未内嵌",
-    summary_dates_all: "全部",
-    error_at_least_one: "至少选一个",
-    cancelled: "已取消。",
 };
 
 /// Pick a language based on explicit override → env LANG → default English.

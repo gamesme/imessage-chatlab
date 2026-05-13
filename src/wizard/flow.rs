@@ -3,7 +3,7 @@
 //! All UI strings come from `crate::wizard::strings`. The mapping from
 //! collected answers to `Options` lives in `crate::wizard::answers`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use inquire::error::InquireError;
 use inquire::{Confirm, MultiSelect, Password, Select, Text};
@@ -78,7 +78,7 @@ fn screen1_source(s: &Strings) -> Result<(PathBuf, Platform, Option<String>), Ru
 }
 
 fn build_preview_config(
-    db_path: &PathBuf,
+    db_path: &Path,
     platform: &Platform,
     cleartext_password: Option<&str>,
 ) -> Result<Config, RuntimeError> {
@@ -92,7 +92,7 @@ fn build_preview_config(
         Platform::iOS => Platform::iOS,
     };
     let opts = Options {
-        db_path: db_path.clone(),
+        db_path: db_path.to_path_buf(),
         attachment_root: None,
         attachment_manager: AttachmentManager::default(),
         export_type: Some(ExportType::Json),
@@ -253,7 +253,7 @@ fn screen7_confirm(
     filter: &FilterChoice,
     copy_method: &AttachmentManagerMode,
     embed_avatars: bool,
-    export_path: &PathBuf,
+    export_path: &Path,
 ) -> Result<(), RuntimeError> {
     eprintln!();
     eprintln!(
