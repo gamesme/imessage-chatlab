@@ -39,6 +39,7 @@ pub const OPTION_CONVERSATION_FILTER: &str = "conversation-filter";
 pub const OPTION_CLEARTEXT_PASSWORD: &str = "cleartext-password";
 pub const OPTION_CUSTOM_CONTACTS_DB_PATH: &str = "contacts-path";
 pub const OPTION_EMBED_AVATARS: &str = "embed-avatars";
+pub const OPTION_QUIET: &str = "quiet";
 
 // Other CLI Text
 pub const SUPPORTED_PLATFORMS: &str = "macOS, iOS";
@@ -91,6 +92,7 @@ pub struct Options {
     pub cleartext_password: Option<String>,
     pub contacts_path: Option<PathBuf>,
     pub embed_avatars: bool,
+    pub quiet: bool,
 }
 
 // MARK: Validation
@@ -201,6 +203,8 @@ impl Options {
             .copied()
             .unwrap_or(true);
 
+        let quiet = args.get_flag(OPTION_QUIET);
+
         Ok(Options {
             db_path,
             attachment_root: attachment_root.cloned(),
@@ -216,6 +220,7 @@ impl Options {
             cleartext_password: cleartext_password.cloned(),
             contacts_path: contacts_path.cloned().map(PathBuf::from),
             embed_avatars,
+            quiet,
         })
     }
 
@@ -392,6 +397,14 @@ pub fn cli() -> Command {
                 .action(ArgAction::Set)
                 .display_order(14),
         )
+        .arg(
+            Arg::new(OPTION_QUIET)
+                .short('q')
+                .long(OPTION_QUIET)
+                .help("Suppress informational output (cache progress, status lines)\nErrors are still printed\n")
+                .action(ArgAction::SetTrue)
+                .display_order(15),
+        )
 }
 
 #[cfg(test)]
@@ -418,6 +431,36 @@ impl Options {
             cleartext_password: None,
             contacts_path: None,
             embed_avatars: true,
+            quiet: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod quiet_flag_tests {
+    use super::*;
+
+    #[test]
+    fn quiet_flag_short_form_sets_field() {
+        let cmd = cli();
+        let matches = cmd.get_matches_from(["imessage-chatlab", "-q", "-o", "/tmp/test_export_quiet_short"]);
+        let opts = Options::from_args(&matches).unwrap();
+        assert!(opts.quiet);
+    }
+
+    #[test]
+    fn quiet_flag_long_form_sets_field() {
+        let cmd = cli();
+        let matches = cmd.get_matches_from(["imessage-chatlab", "--quiet", "-o", "/tmp/test_export_quiet_long"]);
+        let opts = Options::from_args(&matches).unwrap();
+        assert!(opts.quiet);
+    }
+
+    #[test]
+    fn quiet_flag_default_is_false() {
+        let cmd = cli();
+        let matches = cmd.get_matches_from(["imessage-chatlab", "-o", "/tmp/test_export_quiet_default"]);
+        let opts = Options::from_args(&matches).unwrap();
+        assert!(!opts.quiet);
     }
 }
