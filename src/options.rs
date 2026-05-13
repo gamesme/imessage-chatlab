@@ -370,6 +370,11 @@ pub fn cli() -> Command {
                         .action(ArgAction::SetTrue),
                 ),
         )
+        .subcommand(
+            Command::new("export")
+                .about("Export iMessage data to ChatLab JSON (same as no subcommand)")
+                .args(export_args()),
+        )
         .args(export_args())
 }
 
