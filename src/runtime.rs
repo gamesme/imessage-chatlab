@@ -431,6 +431,13 @@ impl Config {
                 )));
             }
 
+            if self.options.dry_run {
+                let preview = crate::preview::build(self)?;
+                crate::preview::print(&preview);
+                crate::info!("(dry run — no files written)");
+                return Ok(());
+            }
+
             // Ensure the path we want to export to exists
             create_dir_all(&self.options.export_path)?;
 

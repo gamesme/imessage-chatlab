@@ -41,6 +41,7 @@ pub const OPTION_CUSTOM_CONTACTS_DB_PATH: &str = "contacts-path";
 pub const OPTION_EMBED_AVATARS: &str = "embed-avatars";
 pub const OPTION_QUIET: &str = "quiet";
 pub const OPTION_NO_TIMESTAMP: &str = "no-timestamp";
+pub const OPTION_DRY_RUN: &str = "dry-run";
 
 // Other CLI Text
 pub const SUPPORTED_PLATFORMS: &str = "macOS, iOS";
@@ -95,6 +96,7 @@ pub struct Options {
     pub embed_avatars: bool,
     pub quiet: bool,
     pub no_timestamp: bool,
+    pub dry_run: bool,
 }
 
 // MARK: Validation
@@ -114,6 +116,7 @@ impl Options {
         let cleartext_password: Option<&String> = args.get_one(OPTION_CLEARTEXT_PASSWORD);
         let contacts_path: Option<&String> = args.get_one(OPTION_CUSTOM_CONTACTS_DB_PATH);
         let no_timestamp = args.get_flag(OPTION_NO_TIMESTAMP);
+        let dry_run = args.get_flag(OPTION_DRY_RUN);
 
         // Only one format; always set so `runtime.rs` always takes the export branch.
         let export_type: Option<ExportType> = Some(ExportType::Json);
@@ -231,6 +234,7 @@ impl Options {
             embed_avatars,
             quiet,
             no_timestamp,
+            dry_run,
         })
     }
 
@@ -446,6 +450,13 @@ pub fn cli() -> Command {
                 .action(ArgAction::SetTrue)
                 .display_order(16),
         )
+        .arg(
+            Arg::new(OPTION_DRY_RUN)
+                .long(OPTION_DRY_RUN)
+                .help("Show what would be exported (counts, size, output path) and exit\nDoes not write any files\n")
+                .action(ArgAction::SetTrue)
+                .display_order(17),
+        )
 }
 
 #[cfg(test)]
@@ -474,6 +485,7 @@ impl Options {
             embed_avatars: true,
             quiet: false,
             no_timestamp: false,
+            dry_run: false,
         }
     }
 }
