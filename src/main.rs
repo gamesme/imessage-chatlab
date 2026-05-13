@@ -14,6 +14,7 @@ mod preview;
 mod progress;
 mod query;
 mod runtime;
+mod wizard;
 
 use std::process::exit;
 
