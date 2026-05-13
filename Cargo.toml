@@ -22,6 +22,7 @@ jzon = "=0.12.5"
 plist = "=1.8.0"
 rusqlite = { version = "=0.39.0", features = ["blob", "bundled"] }
 sha1 = "=0.10.6"
+inquire = "0.9.4"
 
 [profile.release]
 lto = true

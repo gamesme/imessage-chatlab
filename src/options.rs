@@ -42,6 +42,7 @@ pub const OPTION_EMBED_AVATARS: &str = "embed-avatars";
 pub const OPTION_QUIET: &str = "quiet";
 pub const OPTION_NO_TIMESTAMP: &str = "no-timestamp";
 pub const OPTION_DRY_RUN: &str = "dry-run";
+pub const OPTION_LANG: &str = "lang";
 
 // Other CLI Text
 pub const SUPPORTED_PLATFORMS: &str = "macOS, iOS";
@@ -474,6 +475,11 @@ fn export_args() -> Vec<Arg> {
             .help("Show what would be exported (counts, size, output path) and exit\nDoes not write any files\n")
             .action(ArgAction::SetTrue)
             .display_order(17),
+        Arg::new(OPTION_LANG)
+            .long(OPTION_LANG)
+            .help("Wizard language: zh or en (auto-detects from $LANG by default)\n")
+            .value_name("zh|en")
+            .display_order(18),
     ]
 }
 
