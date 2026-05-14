@@ -77,9 +77,20 @@ fn run_export(matches: &clap::ArgMatches) -> Result<(), RuntimeError> {
 
 /// True when the user invoked the program with no flags or only --lang
 /// (which can sit alongside the wizard).
+///
+/// `matches.ids()` reports every registered arg with a value — including
+/// `SetTrue` flags that clap silently defaults to `false`. We have to filter
+/// down to args whose value actually came from the command line.
 fn is_no_flags_invocation(matches: &clap::ArgMatches) -> bool {
+    use clap::parser::ValueSource;
     matches
         .ids()
+        .filter(|id| {
+            matches!(
+                matches.value_source(id.as_str()),
+                Some(ValueSource::CommandLine)
+            )
+        })
         .all(|id| id.as_str() == options::OPTION_LANG)
 }
 
