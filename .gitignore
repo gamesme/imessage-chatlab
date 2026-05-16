@@ -19,3 +19,7 @@ Cargo.lock
 # Local environment
 .env
 .env.local
+
+# Internal planning / review docs — kept local, not published
+docs/
+PLAN.md
