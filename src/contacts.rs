@@ -188,11 +188,10 @@ impl ContactsIndex {
             if let Some(mut name) = name {
                 if with_images {
                     // Image data is in column 4 (after first/last/phone/email)
-                    if let Ok(Some(img_bytes)) = row.get::<_, Option<Vec<u8>>>(4) {
-                        if !img_bytes.is_empty() {
+                    if let Ok(Some(img_bytes)) = row.get::<_, Option<Vec<u8>>>(4)
+                        && !img_bytes.is_empty() {
                             name.avatar_bytes = Some(img_bytes);
                         }
-                    }
                 }
 
                 if let Some(email_raw) = row.get::<_, Option<String>>(3)? {
@@ -257,8 +256,8 @@ impl ContactsIndex {
              LEFT JOIN ABMultiValue AS ph ON ph.record_id = p.ROWID AND ph.property = 3
              LEFT JOIN ABMultiValue AS em ON em.record_id = p.ROWID AND em.property = 4
              LEFT JOIN ABImage      AS i  ON i.record_id  = p.ROWID",
-        ) {
-            if let Ok(mut rows) = avatar_stmt.query([]) {
+        )
+            && let Ok(mut rows) = avatar_stmt.query([]) {
                 while let Ok(Some(row)) = rows.next() {
                     let phone: Option<String> = row.get(1).unwrap_or(None);
                     let email: Option<String> = row.get(2).unwrap_or(None);
@@ -268,25 +267,20 @@ impl ContactsIndex {
 
                     if let Some(phone) = phone {
                         for key in phone_keys(&phone) {
-                            if let Some(entry) = index.get_mut(&key) {
-                                if entry.avatar_bytes.is_none() {
+                            if let Some(entry) = index.get_mut(&key)
+                                && entry.avatar_bytes.is_none() {
                                     entry.avatar_bytes = Some(img_bytes.clone());
                                 }
-                            }
                         }
                     }
-                    if let Some(email) = email {
-                        if let Some(norm) = normalize_email(&email) {
-                            if let Some(entry) = index.get_mut(&norm) {
-                                if entry.avatar_bytes.is_none() {
+                    if let Some(email) = email
+                        && let Some(norm) = normalize_email(&email)
+                            && let Some(entry) = index.get_mut(&norm)
+                                && entry.avatar_bytes.is_none() {
                                     entry.avatar_bytes = Some(img_bytes.clone());
                                 }
-                            }
-                        }
-                    }
                 }
             }
-        }
 
         Ok(Self { index })
     }
@@ -320,11 +314,10 @@ impl ContactsIndex {
     pub fn get_avatar(&self, id: &str) -> Option<&[u8]> {
         for id_part in id.split_whitespace() {
             if looks_like_email(id_part) {
-                if let Some(key) = normalize_email(id_part) {
-                    if let Some(n) = self.index.get(&key) {
+                if let Some(key) = normalize_email(id_part)
+                    && let Some(n) = self.index.get(&key) {
                         return n.avatar_bytes.as_deref();
                     }
-                }
                 continue;
             }
             for k in phone_keys(id_part) {

@@ -73,6 +73,7 @@ impl ConversationBuffer {
     }
 }
 
+#[allow(clippy::upper_case_acronyms)]
 pub struct JSON<'a> {
     pub config: &'a Config,
     pub(crate) conversations: HashMap<i32, ConversationBuffer>,
@@ -183,13 +184,11 @@ impl<'a> JSON<'a> {
         if msg.is_from_me() {
             return Self::owner_id(self.config, msg);
         }
-        if let Some(handle_id) = msg.handle_id {
-            if let Some(&internal_id) = self.config.real_participants.get(&handle_id) {
-                if let Some(name) = self.config.participants.get(&internal_id) {
+        if let Some(handle_id) = msg.handle_id
+            && let Some(&internal_id) = self.config.real_participants.get(&handle_id)
+                && let Some(name) = self.config.participants.get(&internal_id) {
                     return name.details.clone();
                 }
-            }
-        }
         UNKNOWN.to_string()
     }
 
@@ -233,11 +232,19 @@ impl<'a> JSON<'a> {
             // a single string field, so classification below uses the first attachment as
             // the representative.
             for att in attachments.iter_mut() {
-                let _ = self.config.options.attachment_manager.handle_attachment(
+                if self.config.options.attachment_manager.handle_attachment(
                     msg,
                     att,
                     self.config,
-                );
+                )
+                .is_none()
+                    && att.path().is_some()
+                {
+                    eprintln!(
+                        "Warning: failed to process attachment for message {}"
+                        , msg.guid
+                    );
+                }
             }
             let first = &attachments[0];
 
@@ -670,7 +677,7 @@ impl<'a> JSON<'a> {
             }
 
             current_message += 1;
-            if current_message % 99 == 0 {
+            if current_message.is_multiple_of(99) {
                 self.pb.set_position(current_message);
             }
         }
@@ -689,7 +696,11 @@ fn attachment_by_guid(
     guid: &str,
 ) -> Option<imessage_database::tables::attachment::Attachment> {
     let mut stmt = db
-        .prepare("SELECT * FROM attachment WHERE guid = ?1 LIMIT 1")
+        .prepare(
+            "SELECT rowid, filename, uti, mime_type, transfer_name, total_bytes, \
+             is_sticker, hide_attachment, emoji_image_short_description \
+             FROM attachment WHERE guid = ?1 LIMIT 1"
+        )
         .ok()?;
     let mut rows = stmt
         .query_map([guid], |row| {

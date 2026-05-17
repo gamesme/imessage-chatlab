@@ -55,15 +55,13 @@ pub fn sniff_mime(bytes: &[u8]) -> Option<ImageMime> {
         return Some(ImageMime::Webp);
     }
     // HEIC: ?? ?? ?? ?? "ftyp" then brand at offset 8
-    if bytes.get(4..8) == Some(b"ftyp") {
-        if let Some(brand) = bytes.get(8..12) {
-            if matches!(brand, b"heic" | b"heix" | b"heim" | b"heis" | b"hevc" | b"hevx"
+    if bytes.get(4..8) == Some(b"ftyp")
+        && let Some(brand) = bytes.get(8..12)
+            && matches!(brand, b"heic" | b"heix" | b"heim" | b"heis" | b"hevc" | b"hevx"
                               | b"mif1" | b"msf1" | b"avif")
             {
                 return Some(ImageMime::Heic);
             }
-        }
-    }
     // TIFF: little-endian or big-endian
     if bytes.starts_with(&[0x49, 0x49, 0x2A, 0x00]) || bytes.starts_with(&[0x4D, 0x4D, 0x00, 0x2A]) {
         return Some(ImageMime::Tiff);

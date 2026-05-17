@@ -12,7 +12,8 @@ use imessage_database::tables::messages::Message;
 
 use crate::runtime::Config;
 
-/// Run a command, ignoring output; returning [`None`] if the process cannot be spawned or waited on.
+/// Run a command, ignoring output; returning [`None`] if the process cannot be spawned,
+/// or if it exits with a non-zero status code.
 pub(super) fn run_command(command: &str, args: Vec<&str>) -> Option<()> {
     match Command::new(command)
         .args(args)
@@ -22,7 +23,14 @@ pub(super) fn run_command(command: &str, args: Vec<&str>) -> Option<()> {
         .spawn()
     {
         Ok(mut convert) => match convert.wait() {
-            Ok(_) => Some(()),
+            Ok(status) => {
+                if status.success() {
+                    Some(())
+                } else {
+                    eprintln!("Command '{command}' exited with status: {status}");
+                    None
+                }
+            }
             Err(why) => {
                 eprintln!("Conversion failed: {why}");
                 None
