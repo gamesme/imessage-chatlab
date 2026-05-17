@@ -157,6 +157,25 @@ imessage-chatlab -t '@rowid:1,@rowid:5'
   `ownerId`)。在导出范围内从未发言的成员不会出现在 `members` 数组中。
   这是当前基于消息驱动收集成员的方式的结构性限制。
 
+## 路线图 / TODO
+
+短期 (无需规范变更):
+
+- [ ] **配置文件支持** — 将常用选项保存到 `~/.config/imessage-chatlab/config.toml`
+- [ ] **联系人索引缓存** — 缓存解析后的联系人到 `~/.cache/imessage-chatlab/contacts.json`,
+  避免每次重建
+- [ ] **废弃或改为 opt-in 的 `orphaned.json`** — 大多数用户不需要
+- [ ] **`meta.groupId`** — 为群聊暴露 iMessage chat identifier
+- [ ] **`TYPE_LOCATION = 8`** — 检测共享位置消息,而不是落到 `TYPE_OTHER(99)`
+- [ ] **进度条消息** — 导出时显示当前会话名称
+
+需 ChatLab 规范扩展:
+
+- [ ] **消息编辑历史** — iMessage 存储了编辑记录; ChatLab v0.0.2 没有 `edits`
+  数组来表示它们
+- [ ] **反应 / tapback 详情** — 当前文本化为 `TYPE_OTHER(99)`;
+  结构化反应需要规范增加 `reactions` 字段
+
 ## 许可证
 
 GPL-3.0-or-later。详见 `LICENSE` 与 `NOTICE.md`。

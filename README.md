@@ -170,6 +170,27 @@ system, 81 recall, 99 other). Media messages use labeled placeholders in
   array. This is a structural limitation of the current message-driven
   member collection approach.
 
+## Roadmap / TODO
+
+Short-term (no spec changes needed):
+
+- [ ] **Config file support** — save common options to
+  `~/.config/imessage-chatlab/config.toml`
+- [ ] **Contact index cache** — cache parsed contacts to
+  `~/.cache/imessage-chatlab/contacts.json` to skip rebuild on every run
+- [ ] **Deprecate or opt-in `orphaned.json`** — most users never need it
+- [ ] **`meta.groupId`** — expose the iMessage chat identifier for group chats
+- [ ] **`TYPE_LOCATION = 8`** — detect shared-location messages instead of
+  falling through to `TYPE_OTHER(99)`
+- [ ] **Progress bar message** — show current conversation name while exporting
+
+Blocked on ChatLab spec extension:
+
+- [ ] **Message edit history** — iMessage stores edits; ChatLab v0.0.2 has no
+  `edits` array to represent them
+- [ ] **Reaction / tapback detail** — currently textified as `TYPE_OTHER(99)`;
+  structured reactions need a `reactions` field in the spec
+
 ## License
 
 GPL-3.0-or-later. See `LICENSE` and `NOTICE.md`.
