@@ -164,6 +164,11 @@ system, 81 recall, 99 other). Media messages use labeled placeholders in
 - When attachment copy is requested but the source file can't be read,
   decrypted, or copied, the JSON still references the bare filename without
   an in-band failure signal.
+- **Group chat `members` only includes participants who sent at least one
+  message** (plus the exporter as `ownerId`). Silent members who never
+  sent a message in the exported range will not appear in the `members`
+  array. This is a structural limitation of the current message-driven
+  member collection approach.
 
 ## License
 
