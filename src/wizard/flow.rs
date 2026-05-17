@@ -109,6 +109,7 @@ fn build_preview_config(
         quiet: true, // suppress cache progress during the wizard
         no_timestamp: false,
         dry_run: false,
+        incremental: false,
     };
     crate::logging::set_quiet(true);
     crate::preflight::check_db_readable(&opts.get_db_path())?;

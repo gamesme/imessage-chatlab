@@ -20,7 +20,7 @@ use imessage_database::{
         messages::Message,
         table::{ATTACHMENTS_DIR, Cacheable, ME, ORPHANED, UNKNOWN, get_db_size},
     },
-    util::{dates::get_offset, size::format_file_size},
+    util::{dates::{TIMESTAMP_FACTOR, get_offset}, size::format_file_size},
 };
 
 use crate::{
@@ -237,7 +237,22 @@ impl Config {
     // MARK: Init
     /// Create a new instance of the application
     ///
-    pub fn new(options: Options) -> Result<Config, RuntimeError> {
+    pub fn new(mut options: Options) -> Result<Config, RuntimeError> {
+        // Handle incremental export: read last export timestamp from marker file
+        if options.incremental && !options.dry_run {
+            let marker = options.export_path.join(".imessage-chatlab-last-export");
+            if let Ok(contents) = std::fs::read_to_string(&marker)
+                && let Ok(last_ts) = contents.trim().parse::<i64>()
+            {
+                let apple_epoch_ns = (last_ts - get_offset()) * TIMESTAMP_FACTOR;
+                options.query_context.start = Some(apple_epoch_ns);
+                let when = chrono::DateTime::from_timestamp(last_ts, 0)
+                    .map(|dt| dt.to_rfc3339())
+                    .unwrap_or_else(|| last_ts.to_string());
+                crate::info!("Incremental: only exporting messages after {when}");
+            }
+        }
+
         let data_source = DataSource::from(&options)?;
 
         crate::info!("Building cache...");
@@ -462,6 +477,18 @@ impl Config {
             match export_type {
                 ExportType::Json => {
                     JSON::new(self)?.iter_messages()?;
+                }
+            }
+
+            // Write incremental marker file on successful export
+            if self.options.incremental && !self.options.dry_run {
+                let marker = self.options.export_path.join(".imessage-chatlab-last-export");
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0);
+                if let Err(e) = std::fs::write(&marker, now.to_string()) {
+                    eprintln!("Warning: failed to write incremental marker: {e}");
                 }
             }
         }

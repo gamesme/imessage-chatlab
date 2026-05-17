@@ -43,6 +43,7 @@ pub const OPTION_QUIET: &str = "quiet";
 pub const OPTION_NO_TIMESTAMP: &str = "no-timestamp";
 pub const OPTION_DRY_RUN: &str = "dry-run";
 pub const OPTION_LANG: &str = "lang";
+pub const OPTION_INCREMENTAL: &str = "incremental";
 
 // Other CLI Text
 pub const SUPPORTED_PLATFORMS: &str = "macOS, iOS";
@@ -98,6 +99,7 @@ pub struct Options {
     pub quiet: bool,
     pub no_timestamp: bool,
     pub dry_run: bool,
+    pub incremental: bool,
 }
 
 // MARK: Validation
@@ -118,6 +120,7 @@ impl Options {
         let contacts_path: Option<&String> = args.get_one(OPTION_CUSTOM_CONTACTS_DB_PATH);
         let no_timestamp = args.get_flag(OPTION_NO_TIMESTAMP);
         let dry_run = args.get_flag(OPTION_DRY_RUN);
+        let incremental = args.get_flag(OPTION_INCREMENTAL);
 
         // Only one format; always set so `runtime.rs` always takes the export branch.
         let export_type: Option<ExportType> = Some(ExportType::Json);
@@ -236,6 +239,7 @@ impl Options {
             quiet,
             no_timestamp,
             dry_run,
+            incremental,
         })
     }
 
@@ -271,6 +275,7 @@ impl Options {
             quiet: false,
             no_timestamp: false,
             dry_run: false,
+            incremental: false,
         }
     }
 }
@@ -511,11 +516,16 @@ fn export_args() -> Vec<Arg> {
             .help("Show what would be exported (counts, size, output path) and exit\nDoes not write any files\n")
             .action(ArgAction::SetTrue)
             .display_order(17),
+        Arg::new(OPTION_INCREMENTAL)
+            .long(OPTION_INCREMENTAL)
+            .help("Only export messages newer than the last export\nA .imessage-chatlab-last-export marker file is written to the output directory\n")
+            .action(ArgAction::SetTrue)
+            .display_order(18),
         Arg::new(OPTION_LANG)
             .long(OPTION_LANG)
             .help("Wizard language: zh or en (auto-detects from $LANG by default)\n")
             .value_name("zh|en")
-            .display_order(18),
+            .display_order(19),
     ]
 }
 
@@ -546,6 +556,7 @@ impl Options {
             quiet: false,
             no_timestamp: false,
             dry_run: false,
+            incremental: false,
         }
     }
 }

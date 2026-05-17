@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{BufWriter, Write},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 use jzon::JsonValue;
@@ -39,6 +39,7 @@ const TYPE_OTHER: u8 = 99;
 const CHATLAB_VERSION: &str = "0.0.2";
 const PLATFORM: &str = "imessage";
 const GENERATOR: &str = "imessage-exporter";
+const DESCRIPTION: &str = "iMessage export";
 
 /// A single message in ChatLab wire format
 #[derive(Clone)]
@@ -390,6 +391,7 @@ impl<'a> JSON<'a> {
         header["version"] = CHATLAB_VERSION.into();
         header["exportedAt"] = exported_at.into();
         header["generator"] = GENERATOR.into();
+        header["description"] = DESCRIPTION.into();
 
         let mut meta = JsonValue::new_object();
         meta["name"] = buf.chat_name.as_str().into();
@@ -502,6 +504,7 @@ impl<'a> JSON<'a> {
     }
 
     pub fn iter_messages(&mut self) -> Result<(), RuntimeError> {
+        let start_time = Instant::now();
         crate::info!(
             "Exporting to {} as json...",
             self.config.options.export_path.display()
@@ -686,6 +689,20 @@ impl<'a> JSON<'a> {
 
         self.pb.finish();
         self.write_all()?;
+
+        let elapsed = start_time.elapsed();
+        let secs = elapsed.as_secs();
+        let millis = elapsed.subsec_millis();
+        let conv_count = self.conversations.len();
+        let msg_count = self.conversations.values().map(|b| b.messages.len()).sum::
+            <usize>();
+        let orphaned_count = self.orphaned.len();
+
+        crate::info!(
+            "Export complete: {msg_count} messages across {conv_count} conversations \
+             ({orphaned_count} orphaned) in {secs}.{millis:03}s → {}",
+            self.config.options.export_path.display()
+        );
         Ok(())
     }
 }

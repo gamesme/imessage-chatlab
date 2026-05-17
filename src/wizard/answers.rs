@@ -74,6 +74,7 @@ pub fn to_options(answers: WizardAnswers) -> Result<Options, RuntimeError> {
         quiet: false,
         no_timestamp: false,
         dry_run: false,
+        incremental: false,
     })
 }
 
