@@ -81,8 +81,10 @@ impl DataSource {
                     let messages_path = options.get_db_path();
                     let conn = get_connection(&messages_path)?;
 
-                    // Check if the backup is encrypted and a password was not provided
-                    if backup.is_none() && conn.query_row("SELECT 1", [], |_| Ok(())).is_err() {
+                    // Check if the backup is encrypted and a password was not provided.
+                    // At this point backup is already known to be None (we are in the else branch),
+                    // so we test whether we can query the database.
+                    if conn.query_row("SELECT 1", [], |_| Ok(())).is_err() {
                         return Err(RuntimeError::InvalidOptions(format!(
                             "The provided iOS backup is encrypted, but no password was provided. Please provide a password using the --{OPTION_CLEARTEXT_PASSWORD} option."
                         )));
@@ -116,18 +118,13 @@ impl DataSource {
         }
     }
 
-    /// Get the current database connection, if it is alive
-    ///
-    /// # Panics
-    ///
-    /// Panics if the database connection is closed.
-    pub(crate) fn db(&self) -> &Connection {
-        match self.messages_connection.as_ref() {
-            Some(db) => db,
-            None => {
-                panic!("Database connection is closed!");
-            }
-        }
+    /// Get the current database connection, if it is alive.
+    pub(crate) fn db(&self) -> Result<&Connection, RuntimeError> {
+        self.messages_connection
+            .as_ref()
+            .ok_or_else(|| RuntimeError::InvalidOptions(
+                "Database connection is closed".to_string()
+            ))
     }
 }
 
@@ -183,7 +180,7 @@ mod tests {
         let ds = DataSource::from(&options).unwrap();
 
         // Test that `db()` returns a connection
-        let conn = ds.db();
+        let conn = ds.db().unwrap();
         assert!(conn.path().is_some());
     }
 

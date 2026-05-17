@@ -9,7 +9,7 @@ use crate::runtime::Config;
 pub fn run(config: &Config, json: bool) -> Result<(), RuntimeError> {
     let summaries = chat_summaries(config)?;
     if json {
-        println!("{}", to_json(&summaries));
+        println!("{}", to_json(&summaries)?);
     } else {
         print_table(&summaries);
     }
@@ -95,35 +95,30 @@ fn commafy(n: i64) -> String {
     out.chars().rev().collect()
 }
 
-fn to_json(summaries: &[ChatSummary]) -> String {
+fn to_json(summaries: &[ChatSummary]) -> Result<String, RuntimeError> {
     let mut arr = JsonValue::new_array();
     for s in summaries {
         let mut obj = JsonValue::new_object();
-        obj.insert("rowid", s.rowid).unwrap();
-        obj.insert("name", s.name.clone()).unwrap();
-        obj.insert("message_count", s.message_count).unwrap();
-        obj.insert(
+        let _ = obj.insert("rowid", s.rowid);
+        let _ = obj.insert("name", s.name.clone());
+        let _ = obj.insert("message_count", s.message_count);
+        let _ = obj.insert(
             "last_active",
             s.last_active
-                .map(|t| {
-                    chrono::DateTime::<chrono::Utc>::from_timestamp(t, 0)
-                        .map(|dt| dt.to_rfc3339())
-                        .unwrap_or_default()
-                })
+                .and_then(|t| chrono::DateTime::<chrono::Utc>::from_timestamp(t, 0))
+                .map(|dt| dt.to_rfc3339())
                 .unwrap_or_default(),
-        )
-        .unwrap();
-        obj.insert(
+        );
+        let _ = obj.insert(
             "type",
             match s.kind {
                 ChatKind::Private => "private",
                 ChatKind::Group => "group",
             },
-        )
-        .unwrap();
-        arr.push(obj).unwrap();
+        );
+        let _ = arr.push(obj);
     }
-    arr.pretty(2)
+    Ok(arr.pretty(2))
 }
 
 #[cfg(test)]
@@ -132,7 +127,7 @@ mod tests {
 
     #[test]
     fn to_json_empty_produces_empty_array() {
-        let json = to_json(&[]);
+        let json = to_json(&[]).unwrap();
         assert!(json.contains("[]") || json == "[]");
     }
 
@@ -145,7 +140,7 @@ mod tests {
             last_active: Some(1_700_000_000),
             kind: ChatKind::Private,
         };
-        let json = to_json(&[item]);
+        let json = to_json(&[item]).unwrap();
         assert!(json.contains("\"rowid\""));
         assert!(json.contains("\"name\""));
         assert!(json.contains("\"message_count\""));

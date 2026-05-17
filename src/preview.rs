@@ -29,7 +29,7 @@ pub struct ExportPreview {
 
 /// Build a preview from the fully initialized Config (post-`resolve_filtered_handles`).
 pub fn build(config: &Config) -> Result<ExportPreview, RuntimeError> {
-    let db = config.data_source.db();
+    let db = config.data_source.db()?;
 
     let chat_count = config.chatrooms.len();
     let selected_chat_count = config

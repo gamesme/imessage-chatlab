@@ -241,16 +241,18 @@ impl Config {
         let data_source = DataSource::from(&options)?;
 
         crate::info!("Building cache...");
+        let db = data_source.db()?;
+
         crate::info!("  [1/5] Caching chats...");
-        let chatrooms = Chat::cache(data_source.db())?;
+        let chatrooms = Chat::cache(db)?;
 
         crate::info!("  [2/5] Caching chatrooms...");
-        let chatroom_participants = ChatToHandle::cache(data_source.db())?;
-        let chat_handle_lookup = ChatToHandle::get_chat_lookup_map(data_source.db())?;
+        let chatroom_participants = ChatToHandle::cache(db)?;
+        let chat_handle_lookup = ChatToHandle::get_chat_lookup_map(db)?;
         let real_chatrooms = ChatToHandle::dedupe(&chatroom_participants, &chat_handle_lookup)?;
 
         crate::info!("  [3/5] Caching participants...");
-        let participants = Handle::cache(data_source.db())?;
+        let participants = Handle::cache(db)?;
         let real_participants = Handle::dedupe(&participants);
         let participants_map = data_source
             .contacts_index
@@ -377,11 +379,9 @@ impl Config {
         // Export size is usually about 6% the size of the db;
         // we divide by 10 to over-estimate about 10% of the total size
         // for some safe headroom
+        let db = self.data_source.db()?;
         let total_db_size = get_db_size(Path::new(
-            self.data_source
-                .db()
-                .path()
-                .ok_or(RuntimeError::FileNameError)?,
+            db.path().ok_or(RuntimeError::FileNameError)?,
         ))?;
         let mut estimated_export_size = total_db_size / 10;
 
@@ -397,7 +397,7 @@ impl Config {
             }
         } else {
             let total_attachment_size = Attachment::get_total_attachment_bytes(
-                self.data_source.db(),
+                db,
                 &self.options.query_context,
             )?;
             estimated_export_size += total_attachment_size;

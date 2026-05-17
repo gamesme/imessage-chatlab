@@ -195,7 +195,7 @@ impl<'a> JSON<'a> {
     /// Classify a message into a (ChatLab type code, content string) pair.
     ///
     /// Precedence: announcement → tapback → app variant → attachment → plain text.
-    pub(crate) fn classify(&self, msg: &Message) -> Result<(u8, Option<String>), TableError> {
+    pub(crate) fn classify(&self, msg: &Message) -> Result<(u8, Option<String>), RuntimeError> {
         // Announcements (includes fully-unsent/recalled)
         if msg.is_announcement() {
             return match msg.get_announcement() {
@@ -225,7 +225,8 @@ impl<'a> JSON<'a> {
         }
 
         // Attachment-based messages
-        let mut attachments = Attachment::from_message(self.config.data_source.db(), msg)?;
+        let db = self.config.data_source.db()?;
+        let mut attachments = Attachment::from_message(db, msg)?;
         if !attachments.is_empty() {
             // Copy/transcode EVERY attachment (no-op when -c disabled) so multi-attachment
             // messages don't silently lose files alongside the JSON.  ChatLab `content` is
@@ -508,14 +509,15 @@ impl<'a> JSON<'a> {
 
         let mut current_message_row = -1;
         let mut current_message: u64 = 0;
+        let db = self.config.data_source.db()?;
         let total_messages = Message::get_count(
-            self.config.data_source.db(),
+            db,
             &self.config.options.query_context,
         )?;
         self.pb.start(total_messages);
 
         let mut statement = Message::stream_rows(
-            self.config.data_source.db(),
+            db,
             &self.config.options.query_context,
         )?;
 
@@ -533,7 +535,7 @@ impl<'a> JSON<'a> {
             }
             current_message_row = msg.rowid;
 
-            if let Ok(body) = msg.parse_body(self.config.data_source.db()) {
+            if let Ok(body) = msg.parse_body(db) {
                 msg.apply_body(body);
             }
 
@@ -600,10 +602,10 @@ impl<'a> JSON<'a> {
                 let group_avatar_url: Option<String> =
                     if self.config.options.embed_avatars && chat_type == "group" {
                         chatroom
-                            .properties(self.config.data_source.db())
+                            .properties(db)
                             .and_then(|props| props.group_photo_guid)
                             .and_then(|guid| {
-                                attachment_by_guid(self.config.data_source.db(), &guid)
+                                attachment_by_guid(db, &guid)
                             })
                             .and_then(|att| {
                                 att.resolved_attachment_path(
@@ -1131,7 +1133,7 @@ mod tests {
     fn attachment_by_guid_returns_some_for_known_guid() {
         let config = make_config();
         let result =
-            attachment_by_guid(config.data_source.db(), "A4B3EEEC-3694-47C7-A153-28351C2385A9");
+            attachment_by_guid(config.data_source.db().unwrap(), "A4B3EEEC-3694-47C7-A153-28351C2385A9");
         assert!(
             result.is_some(),
             "expected fixture to contain attachment with this GUID"
@@ -1142,7 +1144,7 @@ mod tests {
     fn attachment_by_guid_returns_none_for_missing_guid() {
         let config = make_config();
         let result =
-            attachment_by_guid(config.data_source.db(), "00000000-0000-0000-0000-000000000000");
+            attachment_by_guid(config.data_source.db().unwrap(), "00000000-0000-0000-0000-000000000000");
         assert!(result.is_none(), "expected None for nonexistent GUID");
     }
 }

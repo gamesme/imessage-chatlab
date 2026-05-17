@@ -25,7 +25,7 @@ pub enum ChatKind {
 /// Build summaries for every chat known to `config`, sorted by `last_active`
 /// descending (most recent first; empty chats at the bottom by message count).
 pub fn chat_summaries(config: &Config) -> Result<Vec<ChatSummary>, RuntimeError> {
-    let db = config.data_source.db();
+    let db = config.data_source.db()?;
     let mut summaries: Vec<ChatSummary> = Vec::with_capacity(config.chatrooms.len());
 
     for (rowid, chat) in &config.chatrooms {
