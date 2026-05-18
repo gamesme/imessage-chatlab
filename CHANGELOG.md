@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 — 2026-05-18
+
+### Added
+- Progress bar now shows the current chat name (`→ <name>`) so you can see which
+  conversation is being processed. Long names are truncated to 40 characters.
+
 ## 0.2.0 — 2026-05-14
 
 ### Added

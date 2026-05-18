@@ -644,6 +644,15 @@ impl<'a> JSON<'a> {
                 reply_to_id,
             };
 
+            // Show the chat we're currently processing on the next progress redraw.
+            // Messages are sorted globally by date, so the displayed name reflects the
+            // chat that owns the most recent message at each 99-message redraw boundary.
+            let progress_chat_name: Option<String> = conv_data
+                .as_ref()
+                .map(|(_, _, name, _, _, _)| name.clone())
+                .or_else(|| Some(format!("[{ORPHANED}]")));
+            self.pb.set_current_chat(progress_chat_name);
+
             match conv_data {
                 Some((real_id, chat_type, chat_name, owner_id, owner_name, group_avatar_url)) => {
                     // Source the sender's avatar Data URL (only if --embed-avatars is on)

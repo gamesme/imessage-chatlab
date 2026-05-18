@@ -1,6 +1,6 @@
 [package]
 name = "imessage-chatlab"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 license = "GPL-3.0-or-later"
 description = "Export iMessage data to ChatLab v0.0.2 standard JSON format"

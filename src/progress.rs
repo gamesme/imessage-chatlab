@@ -12,6 +12,7 @@ const BAR_WIDTH: usize = 20;
 const BAR_FILL: char = '#';
 const BAR_ARROW: char = '>';
 const BAR_EMPTY: char = ' ';
+const MAX_CHAT_NAME_CHARS: usize = 40;
 
 const HUMAN_COUNT_THRESHOLDS: [(u64, &str); 5] = [
     (1_000_000_000_000, "T"), // trillion
@@ -46,12 +47,24 @@ fn format_human_rate(rate: f64) -> String {
     format!("{rate:.1}")
 }
 
+/// Truncate a chat name to at most `max_chars` characters, appending '…' when shortened.
+/// Operates on Unicode scalar values so multi-byte names (e.g. CJK, emoji) are not split mid-codepoint.
+fn truncate_chat_name(name: &str, max_chars: usize) -> String {
+    if name.chars().count() <= max_chars {
+        return name.to_string();
+    }
+    let keep = max_chars.saturating_sub(1);
+    let head: String = name.chars().take(keep).collect();
+    format!("{head}…")
+}
+
 /// Bespoke progress bar for iMessage exports.
 pub struct ExportProgress {
     length: Cell<u64>,
     position: Cell<u64>,
     start_time: Cell<Option<Instant>>,
     message: RefCell<Option<String>>,
+    current_chat: RefCell<Option<String>>,
 }
 
 impl ExportProgress {
@@ -62,6 +75,7 @@ impl ExportProgress {
             position: Cell::new(0),
             start_time: Cell::new(None),
             message: RefCell::new(None),
+            current_chat: RefCell::new(None),
         }
     }
 
@@ -77,6 +91,12 @@ impl ExportProgress {
     pub fn set_position(&self, pos: u64) {
         self.position.set(pos);
         self.draw();
+    }
+
+    /// Sets the chat name shown alongside the bar. Pass `None` to clear.
+    /// Does not trigger a redraw on its own — the next `set_position`/`finish` call shows the update.
+    pub fn set_current_chat(&self, name: Option<String>) {
+        *self.current_chat.borrow_mut() = name;
     }
 
     /// Finishes the progress bar
@@ -139,8 +159,19 @@ impl ExportProgress {
             format!("({}/s, ETA: {eta})", format_human_rate(rate))
         };
 
+        // Current chat name suffix
+        let chat_suffix = {
+            let cc = self.current_chat.borrow();
+            match cc.as_deref() {
+                Some(name) if !name.is_empty() => {
+                    format!(" → {}", truncate_chat_name(name, MAX_CHAT_NAME_CHARS))
+                }
+                _ => String::new(),
+            }
+        };
+
         let line =
-            format!("\r  [{elapsed_secs}s] [\x1b[36m{bar}\x1b[0m] {pos_str}/{len_str} {rate_eta}");
+            format!("\r  [{elapsed_secs}s] [\x1b[36m{bar}\x1b[0m] {pos_str}/{len_str} {rate_eta}{chat_suffix}");
 
         let mut stderr = io::stderr().lock();
         // \x1b[K erases from cursor to end of line, clearing any leftover characters
@@ -176,5 +207,46 @@ mod tests {
         assert_eq!(format_human_rate(1_500_000.0), "1.5M");
         assert_eq!(format_human_rate(2_500_000_000.0), "2.5B");
         assert_eq!(format_human_rate(1_200_000_000_000.0), "1.2T");
+    }
+
+    #[test]
+    fn truncate_chat_name_returns_name_when_within_limit() {
+        assert_eq!(truncate_chat_name("Family", 40), "Family");
+    }
+
+    #[test]
+    fn truncate_chat_name_returns_name_when_exactly_at_limit() {
+        let name = "a".repeat(40);
+        assert_eq!(truncate_chat_name(&name, 40), name);
+    }
+
+    #[test]
+    fn truncate_chat_name_shortens_with_ellipsis_when_over_limit() {
+        let name = "a".repeat(45);
+        let truncated = truncate_chat_name(&name, 40);
+        assert_eq!(truncated.chars().count(), 40);
+        assert!(truncated.ends_with('…'));
+        assert!(truncated.starts_with(&"a".repeat(39)));
+    }
+
+    #[test]
+    fn truncate_chat_name_handles_multibyte_chars_without_panic() {
+        // 30 Chinese chars (each 3 bytes in UTF-8) — must truncate by char count, not byte count
+        let name: String = "群组".chars().cycle().take(60).collect();
+        let truncated = truncate_chat_name(&name, 40);
+        assert_eq!(truncated.chars().count(), 40);
+        assert!(truncated.ends_with('…'));
+    }
+
+    #[test]
+    fn set_current_chat_updates_field() {
+        let pb = ExportProgress::new();
+        pb.set_current_chat(Some("Family Group Chat".to_string()));
+        assert_eq!(
+            pb.current_chat.borrow().as_deref(),
+            Some("Family Group Chat")
+        );
+        pb.set_current_chat(None);
+        assert!(pb.current_chat.borrow().is_none());
     }
 }
