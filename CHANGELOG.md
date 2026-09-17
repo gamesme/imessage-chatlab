@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `meta.groupId` for group chats (iMessage `chat_identifier`)
+- `TYPE_LOCATION = 8` for continuous shared-location start/stop events
+- Owner member now includes `roles: [{ "id": "owner" }]`
+- Group `members` are seeded from `chatroom_participants`, including silent
+  participants who never sent a message in the export range
+
 ## 0.2.1 — 2026-05-18
 
 ### Added

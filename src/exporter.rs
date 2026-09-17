@@ -31,6 +31,7 @@ const TYPE_VIDEO: u8 = 3;
 const TYPE_FILE: u8 = 4;
 const TYPE_EMOJI: u8 = 5;
 const TYPE_LINK: u8 = 7;
+const TYPE_LOCATION: u8 = 8;
 const TYPE_CALL: u8 = 23;
 const TYPE_SYSTEM: u8 = 80;
 const TYPE_RECALL: u8 = 81;
@@ -58,6 +59,8 @@ pub(crate) struct ConversationBuffer {
     chat_name: String,
     chat_type: &'static str, // "group" or "private"
     owner_id: String,
+    /// iMessage `chat_identifier` for group chats (`meta.groupId`); `None` for private.
+    group_id: Option<String>,
     /// Ordered (platformId, displayName, avatarDataUrl). Owner is always index 0.
     members: Vec<(String, String, Option<String>)>,
     messages: Vec<ChatLabMessage>,
@@ -66,11 +69,21 @@ pub(crate) struct ConversationBuffer {
 }
 
 impl ConversationBuffer {
-    /// Append member if not already present (linear scan — member count is tiny)
+    /// Append member if not already present (linear scan — member count is tiny).
+    /// If the member already exists with no avatar, fill in a newly available avatar.
     fn add_member(&mut self, platform_id: String, display_name: String, avatar_url: Option<String>) {
-        if !self.members.iter().any(|(id, _, _)| id == &platform_id) {
-            self.members.push((platform_id, display_name, avatar_url));
+        if let Some((_, name, existing_avatar)) =
+            self.members.iter_mut().find(|(id, _, _)| id == &platform_id)
+        {
+            if !display_name.is_empty() {
+                *name = display_name;
+            }
+            if existing_avatar.is_none() && avatar_url.is_some() {
+                *existing_avatar = avatar_url;
+            }
+            return;
         }
+        self.members.push((platform_id, display_name, avatar_url));
     }
 }
 
@@ -195,8 +208,23 @@ impl<'a> JSON<'a> {
 
     /// Classify a message into a (ChatLab type code, content string) pair.
     ///
-    /// Precedence: announcement → tapback → app variant → attachment → plain text.
+    /// Precedence: location share → announcement → tapback → app variant → attachment → plain text.
     pub(crate) fn classify(&self, msg: &Message) -> Result<(u8, Option<String>), RuntimeError> {
+        // Shared-location start/stop (legacy item_type=4 / group_action_type=0 rows).
+        // Detected before announcements because get_announcement() returns None for these.
+        if msg.started_sharing_location() {
+            return Ok((
+                TYPE_LOCATION,
+                Some("Started sharing location".to_string()),
+            ));
+        }
+        if msg.stopped_sharing_location() {
+            return Ok((
+                TYPE_LOCATION,
+                Some("Stopped sharing location".to_string()),
+            ));
+        }
+
         // Announcements (includes fully-unsent/recalled)
         if msg.is_announcement() {
             return match msg.get_announcement() {
@@ -359,6 +387,11 @@ impl<'a> JSON<'a> {
                 let mut obj = JsonValue::new_object();
                 obj["platformId"] = pid.as_str().into();
                 obj["accountName"] = name.as_str().into();
+                if pid == &buf.owner_id {
+                    let mut role = JsonValue::new_object();
+                    role["id"] = "owner".into();
+                    obj["roles"] = JsonValue::Array(vec![role]);
+                }
                 if let Some(url) = avatar_url {
                     obj["avatar"] = url.as_str().into();
                 }
@@ -398,6 +431,9 @@ impl<'a> JSON<'a> {
         meta["platform"] = PLATFORM.into();
         meta["type"] = buf.chat_type.into();
         meta["ownerId"] = buf.owner_id.as_str().into();
+        if let Some(gid) = &buf.group_id {
+            meta["groupId"] = gid.as_str().into();
+        }
         if let Some(url) = &buf.group_avatar_url {
             meta["groupAvatar"] = url.as_str().into();
         }
@@ -467,6 +503,7 @@ impl<'a> JSON<'a> {
                 chat_name: ORPHANED.to_string(),
                 chat_type: "private",
                 owner_id,
+                group_id: None,
                 members,
                 messages: self.orphaned.clone(),
                 group_avatar_url: None,
@@ -602,6 +639,12 @@ impl<'a> JSON<'a> {
                     .unwrap_or(ME)
                     .to_string();
 
+                let group_id = if chat_type == "group" {
+                    Some(chatroom.chat_identifier.clone())
+                } else {
+                    None
+                };
+
                 let group_avatar_url: Option<String> =
                     if self.config.options.embed_avatars && chat_type == "group" {
                         chatroom
@@ -631,7 +674,22 @@ impl<'a> JSON<'a> {
                         None
                     };
 
-                (real_id, chat_type, chat_name, owner_id, owner_name, group_avatar_url)
+                let seeded_members = seed_members_from_chatroom(
+                    self.config,
+                    chatroom.rowid,
+                    &owner_id,
+                    &owner_name,
+                );
+
+                (
+                    real_id,
+                    chat_type,
+                    chat_name,
+                    owner_id,
+                    group_id,
+                    group_avatar_url,
+                    seeded_members,
+                )
             });
 
             let clm = ChatLabMessage {
@@ -649,12 +707,20 @@ impl<'a> JSON<'a> {
             // chat that owns the most recent message at each 99-message redraw boundary.
             let progress_chat_name: Option<String> = conv_data
                 .as_ref()
-                .map(|(_, _, name, _, _, _)| name.clone())
+                .map(|(_, _, name, _, _, _, _)| name.clone())
                 .or_else(|| Some(format!("[{ORPHANED}]")));
             self.pb.set_current_chat(progress_chat_name);
 
             match conv_data {
-                Some((real_id, chat_type, chat_name, owner_id, owner_name, group_avatar_url)) => {
+                Some((
+                    real_id,
+                    chat_type,
+                    chat_name,
+                    owner_id,
+                    group_id,
+                    group_avatar_url,
+                    seeded_members,
+                )) => {
                     // Source the sender's avatar Data URL (only if --embed-avatars is on)
                     let sender_avatar_url: Option<String> = if self.config.options.embed_avatars {
                         msg.handle_id.and_then(|h| {
@@ -677,8 +743,9 @@ impl<'a> JSON<'a> {
                             .or_insert_with(|| ConversationBuffer {
                                 chat_name,
                                 chat_type,
-                                owner_id: owner_id.clone(),
-                                members: vec![(owner_id, owner_name, None)],
+                                owner_id,
+                                group_id,
+                                members: seeded_members,
                                 messages: Vec::new(),
                                 group_avatar_url,
                             });
@@ -714,6 +781,45 @@ impl<'a> JSON<'a> {
         );
         Ok(())
     }
+}
+
+/// Prefill conversation members from `chat_handle` / `chatroom_participants`.
+/// Owner is always first; remaining handles are appended even if they never sent a message.
+fn seed_members_from_chatroom(
+    config: &Config,
+    chatroom_rowid: i32,
+    owner_id: &str,
+    owner_name: &str,
+) -> Vec<(String, String, Option<String>)> {
+    let mut members = vec![(owner_id.to_string(), owner_name.to_string(), None)];
+    if let Some(handles) = config.chatroom_participants.get(&chatroom_rowid) {
+        for &handle_id in handles {
+            let Some(name) = config.resolve_participant(handle_id) else {
+                continue;
+            };
+            let platform_id = name.details.clone();
+            if platform_id.is_empty() || platform_id == owner_id {
+                continue;
+            }
+            let display_name = name.get_display_name().to_string();
+            let avatar_url = if config.options.embed_avatars {
+                config
+                    .data_source
+                    .contacts_index
+                    .get_avatar(&name.details)
+                    .and_then(|bytes| {
+                        let conv = config.options.attachment_manager.image_converter.as_ref();
+                        crate::avatar::bytes_to_data_url_with_converter(bytes, conv)
+                    })
+            } else {
+                None
+            };
+            if !members.iter().any(|(id, _, _)| id == &platform_id) {
+                members.push((platform_id, display_name, avatar_url));
+            }
+        }
+    }
+    members
 }
 
 /// Looks up a single attachment row by its GUID. Returns `None` when there's no match.
@@ -896,7 +1002,7 @@ mod tests {
     }
 
     #[test]
-    fn classify_announcement_with_no_action_falls_through_to_text() {
+    fn classify_started_sharing_location_is_type_8() {
         let config = make_config();
         let exporter = JSON {
             config: &config,
@@ -905,13 +1011,31 @@ mod tests {
             pb: ExportProgress::new(),
         };
         let mut msg = make_msg();
-        // item_type=4 marks this as a group action announcement, but group_action_type=0
-        // with no other_handle set means get_announcement() returns None, so the
-        // announcement arm falls through to the catch-all which returns TYPE_TEXT.
+        // Legacy continuous location share start: item_type=4, group_action_type=0, share_status=false
         msg.item_type = 4;
         msg.group_action_type = 0;
-        let (t, _) = exporter.classify(&msg).unwrap();
-        assert_eq!(t, TYPE_TEXT);
+        msg.share_status = false;
+        let (t, content) = exporter.classify(&msg).unwrap();
+        assert_eq!(t, TYPE_LOCATION);
+        assert_eq!(content.as_deref(), Some("Started sharing location"));
+    }
+
+    #[test]
+    fn classify_stopped_sharing_location_is_type_8() {
+        let config = make_config();
+        let exporter = JSON {
+            config: &config,
+            conversations: HashMap::new(),
+            orphaned: Vec::new(),
+            pb: ExportProgress::new(),
+        };
+        let mut msg = make_msg();
+        msg.item_type = 4;
+        msg.group_action_type = 0;
+        msg.share_status = true;
+        let (t, content) = exporter.classify(&msg).unwrap();
+        assert_eq!(t, TYPE_LOCATION);
+        assert_eq!(content.as_deref(), Some("Stopped sharing location"));
     }
 
     #[test]
@@ -963,6 +1087,7 @@ mod tests {
             chat_name: "Test Chat".to_string(),
             chat_type: "private",
             owner_id: "Me".to_string(),
+            group_id: None,
             members: vec![("Me".to_string(), "Me".to_string(), None)],
             messages: Vec::new(),
             group_avatar_url: None,
@@ -983,6 +1108,7 @@ mod tests {
             chat_name: "Test".to_string(),
             chat_type: "private",
             owner_id: "Me".to_string(),
+            group_id: None,
             members: vec![("Me".to_string(), "Me".to_string(), None)],
             messages: vec![ChatLabMessage {
                 sender_id: "Me".to_string(),
@@ -1006,6 +1132,7 @@ mod tests {
             chat_name: "Test".to_string(),
             chat_type: "private",
             owner_id: "Me".to_string(),
+            group_id: None,
             members: vec![("Me".to_string(), "Me".to_string(), None)],
             messages: vec![ChatLabMessage {
                 sender_id: "Me".to_string(),
@@ -1075,6 +1202,7 @@ mod tests {
             chat_name: "Test".to_string(),
             chat_type: "private",
             owner_id: "Me".to_string(),
+            group_id: None,
             members: vec![("Me".to_string(), "Me".to_string(), None)],
             messages: vec![ChatLabMessage {
                 sender_id: "Me".to_string(),
@@ -1097,6 +1225,7 @@ mod tests {
             chat_name: "Test".to_string(),
             chat_type: "private",
             owner_id: "Me".to_string(),
+            group_id: None,
             members: vec![
                 ("Me".to_string(), "Me".to_string(), None),
                 ("+15555550100".to_string(), "Alice".to_string(),
@@ -1115,6 +1244,7 @@ mod tests {
             chat_name: "Test".to_string(),
             chat_type: "private",
             owner_id: "Me".to_string(),
+            group_id: None,
             members: vec![("Me".to_string(), "Me".to_string(), None)],
             messages: Vec::new(),
             group_avatar_url: None,
@@ -1129,6 +1259,7 @@ mod tests {
             chat_name: "Family".to_string(),
             chat_type: "group",
             owner_id: "Me".to_string(),
+            group_id: Some("chat123456".to_string()),
             members: vec![("Me".to_string(), "Me".to_string(), None)],
             messages: Vec::new(),
             group_avatar_url: Some("data:image/jpeg;base64,/9j/4A==".to_string()),
@@ -1143,12 +1274,88 @@ mod tests {
             chat_name: "Family".to_string(),
             chat_type: "group",
             owner_id: "Me".to_string(),
+            group_id: Some("chat123456".to_string()),
             members: vec![("Me".to_string(), "Me".to_string(), None)],
             messages: Vec::new(),
             group_avatar_url: None,
         };
         let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
         assert!(!json_str.contains("\"groupAvatar\""));
+    }
+
+    #[test]
+    fn serialize_group_includes_group_id() {
+        let buf = ConversationBuffer {
+            chat_name: "Family".to_string(),
+            chat_type: "group",
+            owner_id: "Me".to_string(),
+            group_id: Some("chat123456789".to_string()),
+            members: vec![("Me".to_string(), "Me".to_string(), None)],
+            messages: Vec::new(),
+            group_avatar_url: None,
+        };
+        let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
+        assert!(json_str.contains("\"groupId\": \"chat123456789\""));
+    }
+
+    #[test]
+    fn serialize_private_omits_group_id() {
+        let buf = ConversationBuffer {
+            chat_name: "Alice".to_string(),
+            chat_type: "private",
+            owner_id: "Me".to_string(),
+            group_id: None,
+            members: vec![("Me".to_string(), "Me".to_string(), None)],
+            messages: Vec::new(),
+            group_avatar_url: None,
+        };
+        let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
+        assert!(!json_str.contains("\"groupId\""));
+    }
+
+    #[test]
+    fn serialize_owner_member_includes_owner_role() {
+        let buf = ConversationBuffer {
+            chat_name: "Family".to_string(),
+            chat_type: "group",
+            owner_id: "Me".to_string(),
+            group_id: Some("chat1".to_string()),
+            members: vec![
+                ("Me".to_string(), "Me".to_string(), None),
+                ("+15555550100".to_string(), "Alice".to_string(), None),
+            ],
+            messages: Vec::new(),
+            group_avatar_url: None,
+        };
+        let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
+        assert!(json_str.contains("\"roles\""));
+        assert!(json_str.contains("\"id\": \"owner\""));
+        // Non-owner member must not get a roles array — roles appears once (owner only)
+        let roles_count = json_str.matches("\"roles\"").count();
+        assert_eq!(roles_count, 1);
+    }
+
+    #[test]
+    fn seed_members_includes_silent_chatroom_participants() {
+        use crate::contacts::Name;
+        use std::collections::BTreeSet;
+
+        let mut config = make_config();
+        config.participants.insert(10, Name::fake_name("Alice"));
+        config.participants.insert(11, Name::fake_name("Bob"));
+        config.real_participants.insert(10, 10);
+        config.real_participants.insert(11, 11);
+        let mut handles = BTreeSet::new();
+        handles.insert(10);
+        handles.insert(11);
+        config.chatroom_participants.insert(42, handles);
+
+        let members = seed_members_from_chatroom(&config, 42, "Me", "Me");
+        assert_eq!(members[0].0, "Me");
+        let ids: Vec<&str> = members.iter().map(|(id, _, _)| id.as_str()).collect();
+        assert!(ids.contains(&"Alice"));
+        assert!(ids.contains(&"Bob"));
+        assert_eq!(members.len(), 3);
     }
 
     // ── attachment_by_guid ───────────────────────────────────────────────────
