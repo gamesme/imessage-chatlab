@@ -70,14 +70,12 @@ pub(crate) struct ConversationBuffer {
 
 impl ConversationBuffer {
     /// Append member if not already present (linear scan — member count is tiny).
-    /// If the member already exists with no avatar, fill in a newly available avatar.
+    /// If the member already exists with no avatar, fill in a newly available avatar;
+    /// the existing display name is preserved.
     fn add_member(&mut self, platform_id: String, display_name: String, avatar_url: Option<String>) {
-        if let Some((_, name, existing_avatar)) =
+        if let Some((_, _, existing_avatar)) =
             self.members.iter_mut().find(|(id, _, _)| id == &platform_id)
         {
-            if !display_name.is_empty() {
-                *name = display_name;
-            }
             if existing_avatar.is_none() && avatar_url.is_some() {
                 *existing_avatar = avatar_url;
             }
@@ -674,12 +672,18 @@ impl<'a> JSON<'a> {
                         None
                     };
 
-                let seeded_members = seed_members_from_chatroom(
-                    self.config,
-                    chatroom.rowid,
-                    &owner_id,
-                    &owner_name,
-                );
+                // Seeding encodes every participant's avatar, so only do it for the
+                // first message of a conversation; later messages never read this value.
+                let seeded_members = if self.conversations.contains_key(&real_id) {
+                    Vec::new()
+                } else {
+                    seed_members_from_chatroom(
+                        self.config,
+                        chatroom.rowid,
+                        &owner_id,
+                        &owner_name,
+                    )
+                };
 
                 (
                     real_id,
@@ -1333,6 +1337,30 @@ mod tests {
         // Non-owner member must not get a roles array — roles appears once (owner only)
         let roles_count = json_str.matches("\"roles\"").count();
         assert_eq!(roles_count, 1);
+    }
+
+    #[test]
+    fn add_member_preserves_existing_name_and_fills_missing_avatar() {
+        let mut buf = ConversationBuffer {
+            chat_name: "Test".to_string(),
+            chat_type: "private",
+            owner_id: "Me".to_string(),
+            group_id: None,
+            members: vec![("Me".to_string(), "Me".to_string(), None)],
+            messages: Vec::new(),
+            group_avatar_url: None,
+        };
+        buf.add_member(
+            "Me".to_string(),
+            "+15555550100".to_string(),
+            Some("data:image/png;base64,AA==".to_string()),
+        );
+        assert_eq!(buf.members.len(), 1);
+        assert_eq!(buf.members[0].1, "Me");
+        assert_eq!(
+            buf.members[0].2.as_deref(),
+            Some("data:image/png;base64,AA==")
+        );
     }
 
     #[test]
