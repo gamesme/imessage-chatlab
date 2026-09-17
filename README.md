@@ -139,8 +139,8 @@ path you provided.
 
 See [ChatLab's standard format spec](https://chatlab.fun/cn/standard/chatlab-format.html)
 for the canonical wire format. Message `type` codes follow the ChatLab enum
-(0 text, 1 image, 2 voice, 3 video, 4 file, 5 sticker, 7 link, 23 call, 80
-system, 81 recall, 99 other). Media messages use labeled placeholders in
+(0 text, 1 image, 2 voice, 3 video, 4 file, 5 sticker, 7 link, 8 location, 23
+call, 80 system, 81 recall, 99 other). Media messages use labeled placeholders in
 `content`:
 
 | Scenario | `content` |
@@ -159,16 +159,12 @@ system, 81 recall, 99 other). Media messages use labeled placeholders in
 - Group avatar bytes are read via plain `fs::read`, which does **not** route
   through the encrypted iOS backup decryption path; `meta.groupAvatar` is
   silently omitted on encrypted backups.
-- Shared-location start/stop events currently fall through to `type: 0`,
-  `content: null`.
+- One-shot Maps placemark balloons (URL balloon overrides) are still mapped as
+  links / other, not `TYPE_LOCATION`. Continuous location share start/stop is
+  exported as `type: 8`.
 - When attachment copy is requested but the source file can't be read,
   decrypted, or copied, the JSON still references the bare filename without
   an in-band failure signal.
-- **Group chat `members` only includes participants who sent at least one
-  message** (plus the exporter as `ownerId`). Silent members who never
-  sent a message in the exported range will not appear in the `members`
-  array. This is a structural limitation of the current message-driven
-  member collection approach.
 
 ## Roadmap / TODO
 
@@ -179,10 +175,18 @@ Short-term (no spec changes needed):
 - [ ] **Contact index cache** — cache parsed contacts to
   `~/.cache/imessage-chatlab/contacts.json` to skip rebuild on every run
 - [ ] **Deprecate or opt-in `orphaned.json`** — most users never need it
-- [ ] **`meta.groupId`** — expose the iMessage chat identifier for group chats
-- [ ] **`TYPE_LOCATION = 8`** — detect shared-location messages instead of
-  falling through to `TYPE_OTHER(99)`
-- [ ] **Progress bar message** — show current conversation name while exporting
+- [ ] **JSONL streaming export** — ChatLab's preferred format for very large
+  histories; deferred until after config/cache work (current JSON path buffers
+  each conversation in memory)
+
+Done (ChatLab v0.0.2 format alignment):
+
+- [x] **`meta.groupId`** — iMessage `chat_identifier` for group chats
+- [x] **`TYPE_LOCATION = 8`** — shared-location start/stop events
+- [x] **Owner `members.roles`** — `{ "id": "owner" }` on the exporter member
+- [x] **Full group `members`** — seed from `chatroom_participants`, including
+  silent participants who never sent a message
+- [x] **Progress bar message** — show current conversation name while exporting
 
 Blocked on ChatLab spec extension:
 

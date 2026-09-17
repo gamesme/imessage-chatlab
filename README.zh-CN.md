@@ -133,7 +133,7 @@ imessage-chatlab -t '@rowid:1,@rowid:5'
 
 完整的输出格式说明见 [ChatLab 标准格式规范](https://chatlab.fun/cn/standard/chatlab-format.html)。
 消息 `type` 字段遵循 ChatLab 枚举(0 文本、1 图片、2 语音、3 视频、4 文件、
-5 表情贴纸、7 链接、23 通话、80 系统、81 撤回、99 其他)。媒体消息的 `content`
+5 表情贴纸、7 链接、8 位置、23 通话、80 系统、81 撤回、99 其他)。媒体消息的 `content`
 字段采用带标签的占位符:
 
 | 场景 | `content` |
@@ -150,12 +150,10 @@ imessage-chatlab -t '@rowid:1,@rowid:5'
 - iOS 上 `ABMultiValue.property` 中电话 / 邮箱的属性编号为尽力解析。
 - 群头像通过 `fs::read` 读取,不走加密 iOS 备份的解密路径;遇到加密备份时
   `meta.groupAvatar` 会被静默省略。
-- 共享位置开始 / 结束事件目前会落到 `type: 0`、`content: null`。
+- 一次性 Maps 地点气泡(URL balloon 覆盖类型)仍映射为链接 / 其他,不是
+  `TYPE_LOCATION`。持续共享位置的开始 / 结束事件会导出为 `type: 8`。
 - 当请求复制附件但源文件无法读取 / 解密 / 复制时,JSON 仍会引用原始文件名,
   没有带内失败标识。
-- **群聊的 `members` 只包含至少发过一条消息的参与者** (以及导出者自己作为
-  `ownerId`)。在导出范围内从未发言的成员不会出现在 `members` 数组中。
-  这是当前基于消息驱动收集成员的方式的结构性限制。
 
 ## 路线图 / TODO
 
@@ -165,9 +163,16 @@ imessage-chatlab -t '@rowid:1,@rowid:5'
 - [ ] **联系人索引缓存** — 缓存解析后的联系人到 `~/.cache/imessage-chatlab/contacts.json`,
   避免每次重建
 - [ ] **废弃或改为 opt-in 的 `orphaned.json`** — 大多数用户不需要
-- [ ] **`meta.groupId`** — 为群聊暴露 iMessage chat identifier
-- [ ] **`TYPE_LOCATION = 8`** — 检测共享位置消息,而不是落到 `TYPE_OTHER(99)`
-- [ ] **进度条消息** — 导出时显示当前会话名称
+- [ ] **JSONL 流式导出** — ChatLab 对超大记录的首选格式;排在配置文件 / 缓存之后
+  (当前 JSON 路径按会话整段缓冲)
+
+已完成 (ChatLab v0.0.2 格式对齐):
+
+- [x] **`meta.groupId`** — 群聊写出 iMessage `chat_identifier`
+- [x] **`TYPE_LOCATION = 8`** — 共享位置开始 / 结束事件
+- [x] **Owner `members.roles`** — 导出者成员带 `{ "id": "owner" }`
+- [x] **完整群 `members`** — 从 `chatroom_participants` 预填,含从未发言的成员
+- [x] **进度条消息** — 导出时显示当前会话名称
 
 需 ChatLab 规范扩展:
 
